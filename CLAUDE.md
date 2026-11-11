@@ -50,10 +50,12 @@ From here on, every command takes `TV=<ip>`.
    it draws the app banners). Ask the person to try the remote: arrows, OK, Back, Home, Home twice (app switcher),
    Menu (Control Center), long OK on an icon (menu).
 4. Show them where things are: *Settings → Apps* to hide/show apps (phone-style apps and other launchers start
-   hidden), long OK → *Move* to reorder, *Settings → Screen saver*, *Settings → System → Performance* (fast mode).
+   hidden), long OK → *Move* to reorder, *Settings → Screen saver*, *Settings → Video and Audio → Sound set*.
 
-Debugging: the WebView can be inspected — `adb forward tcp:9222 localabstract:webview_devtools_remote_$(adb shell pidof app.tvos.home)`,
-then `http://localhost:9222/json` gives the DevTools websocket. Native errors: `adb logcat | grep tvos`.
+The launcher is a native Android app (`android/`, Java, plain Views); `web/` is only the browser prototype of the
+design. Debugging: `adb logcat -s tvos tvos-slow` (errors, slow key handling); smoothness on the TV:
+`TV=<ip> tools/bench.sh` (run it twice: the first run also pays for Android compiling the code); memory:
+`adb shell dumpsys meminfo app.tvos.home`.
 
 ## 5. Make the TV faster (optional, ask for each step)
 

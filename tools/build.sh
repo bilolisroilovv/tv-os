@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the Android app with the launcher inside (web/ is packed as its assets).
+# Build the native Android app (the photos and Apple's Aerial catalogue made by tools/aerials.py are packed with it).
 #
 #   tools/build.sh            -> android/app/build/outputs/apk/release/app-release.apk
 #

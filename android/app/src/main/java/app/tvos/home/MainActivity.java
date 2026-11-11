@@ -3,106 +3,64 @@ package app.tvos.home;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Process;
+import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.View;
-import android.webkit.RenderProcessGoneDetail;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
+import android.view.Window;
+import android.widget.FrameLayout;
 
 /**
- * The home screen: one full-screen WebView showing the launcher (web/ of the repository, packed as assets).
- * The page is served from a private origin, https://tvos.local/, by {@link LocalServer}; the remote's keys that a
- * page never receives (Back, Home, Menu, Settings) are handed to it as TV.emit(action); {@link Bridge} gives it
- * the apps, the device and Android's settings screens.
+ * The home screen activity: one native stage (no WebView). Remote keys become the launcher's actions:
+ * arrows, OK (held 550 ms = "hold"), Back, Home (twice = app switcher), Menu (Control Center), Settings.
  */
 public class MainActivity extends Activity {
-    static final String HOST = "tvos.local";
-    static final String ORIGIN = "https://" + HOST + "/";
+    Home home;
+    Stage stage;
+    boolean visible, resumed;
+    private FrameLayout frame;
+    private Fps fps;
 
-    private WebView web;
-    private LocalServer server;
-    private boolean resumed, loaded;
-
-    /** Installed, removed or updated apps: the launcher reloads its tiles when it is next shown. */
+    /** Installed, removed or updated apps: the tiles are rebuilt (now, or when the home screen is next shown). */
     private final BroadcastReceiver packages = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
-            Bridge.forgetApps();
-            js("window.dispatchEvent(new Event('tvapps'))");
+            if (home != null) home.appsChanged();
         }
     };
 
-    @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        // chrome://inspect over ADB (only a computer that ADB already trusts can connect).
-        WebView.setWebContentsDebuggingEnabled(true);
-        server = new LocalServer(this);
-        web = new WebView(this);
-        web.setBackgroundColor(Color.BLACK);
-        web.setVerticalScrollBarEnabled(false);
-        web.setHorizontalScrollBarEnabled(false);
-        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        WebSettings s = web.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setMediaPlaybackRequiresUserGesture(false); // the screen saver plays by itself
-        s.setAllowFileAccess(false);
-        s.setAllowContentAccess(false);
-        s.setTextZoom(100);
-        s.setSupportZoom(false);
-        // The page lays out at 1920 CSS px (its viewport meta) and the WebView shows it zoomed out to the screen,
-        // so everything is rasterised at the screen's own resolution (a CSS scale() would make Chrome rasterise
-        // at twice the size and shrink it on every frame).
-        s.setUseWideViewPort(true);
-        s.setLoadWithOverviewMode(true);
-        s.setOffscreenPreRaster(true); // the next frames are rasterised ahead: smoother on a slow GPU
-        web.setWebViewClient(new WebViewClient() {
+        Tv.app = getApplicationContext();
+        Prefs.init(this);
+        Theme.read();
+        Wallpapers.init(getAssets());
+        Sounds.init(this);
+        Window w = getWindow();
+        w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        frame = new FrameLayout(this) {
             @Override
-            public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
-                return server.handle(r);
+            protected void onLayout(boolean changed, int l, int t, int r, int b) {
+                super.onLayout(changed, l, t, r, b);
+                fit(r - l, b - t);
             }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
-                return !HOST.equals(r.getUrl().getHost());
-            }
-
-            @Override
-            public void onPageFinished(WebView v, String url) {
-                loaded = true;
-                if (resumed) js("window.dispatchEvent(new Event('tvresume'))");
-            }
-
-            @Override
-            public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail d) {
-                // The system took the page's process back (low memory): start the home screen again.
-                recreate();
-                return true;
-            }
-        });
-        web.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public Bitmap getDefaultVideoPoster() { // no grey "play" picture before a video starts
-                return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
-            }
-        });
-        web.addJavascriptInterface(new Bridge(this), "Android");
-        setContentView(web);
-        web.requestFocus();
-        web.loadUrl(ORIGIN + "index.html");
+        };
+        frame.setBackgroundColor(0xff000000);
+        stage = new Stage(this);
+        frame.addView(stage, new FrameLayout.LayoutParams(Tv.W, Tv.H));
+        setContentView(frame);
+        home = new Home(this, stage);
+        fps = new Fps(this);
+        Prefs.on("fps", () -> fps.set(Prefs.b("fps")));
+        fps.set(Prefs.b("fps"));
+        Bench.register(this);
 
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -113,37 +71,92 @@ public class MainActivity extends Activity {
         else registerReceiver(packages, f);
     }
 
-    void js(String code) {
-        if (web != null) web.post(() -> web.evaluateJavascript(code, null));
+    /** The 1920x1080 stage scaled to the screen (a 1080p TV draws it 1:1). */
+    private void fit(int w, int h) {
+        if (w <= 0 || h <= 0) return;
+        float s = Math.min(w / (float) Tv.W, h / (float) Tv.H);
+        stage.setPivotX(0);
+        stage.setPivotY(0);
+        stage.setScaleX(s);
+        stage.setScaleY(s);
+        stage.setTranslationX((w - Tv.W * s) / 2);
+        stage.setTranslationY((h - Tv.H * s) / 2);
     }
 
-    void emit(String action) {
-        js("window.TV && TV.emit('" + action + "')");
-    }
+    // ---------- remote ----------
 
-    void reload() {
-        Bridge.forgetApps();
-        if (web != null) web.post(() -> web.reload());
+    private long lastRepeat;
+    private boolean okDown, held;
+    private final Runnable hold = () -> { held = true; act("hold"); };
+
+    void act(String a) {
+        if (home == null) return;
+        long t0 = SystemClock.uptimeMillis();
+        home.key(a);
+        long d = SystemClock.uptimeMillis() - t0;
+        if (d > 24) android.util.Log.w("tvos-slow", a + " in " + home.mode + ": " + d + " ms");
     }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
-        String action = null;
-        switch (e.getKeyCode()) {
+        int code = e.getKeyCode();
+        boolean down = e.getAction() == KeyEvent.ACTION_DOWN, up = e.getAction() == KeyEvent.ACTION_UP;
+        if (Modal.keyboardOpen() && down && !isRemoteKey(code)) {
+            if (code == KeyEvent.KEYCODE_DEL) { Modal.typed(0, true); return true; }
+            int ch = e.getUnicodeChar();
+            if (ch > 0 && Modal.typed(ch, false)) return true;
+        }
+        switch (code) {
+            case KeyEvent.KEYCODE_DPAD_UP: return dir(e, "up");
+            case KeyEvent.KEYCODE_DPAD_DOWN: return dir(e, "down");
+            case KeyEvent.KEYCODE_DPAD_LEFT: return dir(e, "left");
+            case KeyEvent.KEYCODE_DPAD_RIGHT: return dir(e, "right");
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+            case KeyEvent.KEYCODE_BUTTON_A:
+                if (down && e.getRepeatCount() == 0) {
+                    okDown = true;
+                    held = false;
+                    Tv.ui.removeCallbacks(hold);
+                    Tv.ui.postDelayed(hold, 550);
+                } else if (up) {
+                    Tv.ui.removeCallbacks(hold);
+                    if (okDown && !held && !e.isCanceled()) act("ok");
+                    okDown = false;
+                }
+                return true;
             case KeyEvent.KEYCODE_BACK:
             case KeyEvent.KEYCODE_ESCAPE:
-                action = "back";
-                break;
+            case KeyEvent.KEYCODE_BUTTON_B:
+                if (up && !e.isCanceled()) act("back");
+                return true;
             case KeyEvent.KEYCODE_MENU:
-                action = "control";
-                break;
+                if (up && !e.isCanceled()) act("control");
+                return true;
             case KeyEvent.KEYCODE_SETTINGS:
-                action = "settings";
-                break;
+                if (up && !e.isCanceled()) act("settings");
+                return true;
             default:
                 return super.dispatchKeyEvent(e);
         }
-        if (e.getAction() == KeyEvent.ACTION_UP && !e.isCanceled()) emit(action);
+    }
+
+    private static boolean isRemoteKey(int code) {
+        return code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT
+                || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_MENU
+                || code == KeyEvent.KEYCODE_ESCAPE || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
+    }
+
+    /** Arrows: a held arrow repeats, at most every 95 ms (as the web version did). */
+    private boolean dir(KeyEvent e, String a) {
+        if (e.getAction() != KeyEvent.ACTION_DOWN) return true;
+        if (e.getRepeatCount() > 0) {
+            long now = SystemClock.uptimeMillis();
+            if (now - lastRepeat < 95) return true;
+            lastRepeat = now;
+        }
+        act(a);
         return true;
     }
 
@@ -151,41 +164,64 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (resumed && Intent.ACTION_MAIN.equals(intent.getAction())) emit("home");
+        if (resumed && Intent.ACTION_MAIN.equals(intent.getAction())) act("home");
+    }
+
+    // ---------- lifecycle: nothing runs while another app is in front ----------
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        visible = true;
+        home.onStart();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         resumed = true;
-        web.onResume();
-        if (loaded) js("window.dispatchEvent(new Event('tvresume'))");
+        home.onResume();
     }
 
     @Override
     protected void onPause() {
         resumed = false;
-        js("window.dispatchEvent(new Event('tvpause'))");
-        web.onPause(); // stops the page's animations and media while an app is in front
         super.onPause();
     }
 
-    @SuppressLint("MissingSuperCall")
     @Override
-    public void onBackPressed() {
-        // A home screen never closes.
+    protected void onStop() {
+        visible = false;
+        home.onStop();
+        super.onStop();
     }
 
     @Override
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);
-        if (level >= TRIM_MEMORY_RUNNING_LOW) js("window.dispatchEvent(new Event('tvlowmemory'))");
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) Wallpapers.trim();
+    }
+
+    @SuppressLint("MissingSuperCall")
+    @Override
+    public void onBackPressed() {
+        // a home screen never closes
     }
 
     @Override
     protected void onDestroy() {
         unregisterReceiver(packages);
-        if (web != null) web.destroy();
+        Bench.unregister(this);
         super.onDestroy();
+    }
+
+    /** Settings -> System -> restart the launcher: the system brings the home screen back at once. */
+    void restart() {
+        Intent i = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(getPackageName())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        stage.animate().alpha(0).setDuration(500).withEndAction(() -> {
+            startActivity(i);
+            Process.killProcess(Process.myPid());
+        });
     }
 }
