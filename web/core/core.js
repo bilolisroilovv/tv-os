@@ -28,6 +28,8 @@
 (function () {
   const stage = document.getElementById('stage');
   function fit() {
+    // In the Android app the page is laid out 1920 CSS px wide and the WebView zooms it to the screen: no scale here.
+    if (window.Android) { stage.style.transform = 'none'; return; }
     // Android's WebView reports innerWidth in device pixels; the visual viewport is the real CSS size.
     const vv = window.visualViewport, W = (vv && vv.width) || document.documentElement.clientWidth || innerWidth,
       H = (vv && vv.height) || document.documentElement.clientHeight || innerHeight;
@@ -185,9 +187,18 @@
       });
     }).catch(() => {});
   }
-  addEventListener('load', () => setTimeout(prepare, 300));
+  addEventListener('load', () => setTimeout(() => { if (NATIVE) prepareFilesOnly(); else prepare(); }, 300));
+  // On the TV: only real sound files (if any) need Web Audio.
+  function prepareFilesOnly() {
+    fetch(SOUND_DIR + 'sounds.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : {})).then((m) => { if (Object.keys(m.files || {}).length) prepare(); }).catch(() => {});
+  }
+  // On the TV (the Android app) the launcher plays Android's own UI sounds, like a native launcher: the focus tick,
+  // the click and keyboard keys; panels, menus and launches stay silent. No Web Audio there at all (no audio
+  // thread, nothing decoded), unless real sound files were added (assets/sounds).
+  const NATIVE = window.Android && window.Android.sound ? { tick: 1, select: 1, key: 1, del: 1 } : null;
   function play(name, o = {}) {
     const r = recipe(name); if (!r || !(r.cat === 'nav' ? navOn : fxOn) || vol <= 0) return;
+    if (NATIVE && !files[name]) { const n = NATIVE[name]; if (n) window.Android.sound(n === 1 ? name : n, vol * (o.gain == null ? 1 : Math.min(1, o.gain))); return; }
     try {
       audio(); if (ac.state === 'suspended') ac.resume();
       const file = files[name], s = ac.createBufferSource(), g = ac.createGain();
@@ -218,7 +229,8 @@
     fling() { play('fling'); },               // a card flicked away (app switcher)
     chime() { play('chime'); },               // done / connected
     error() { if (files.error) play('error'); else { play('bump'); play('bump', { delay: 0.11, gain: 0.75, rate: 0.92 }); } },
-    sources() { const out = {}; for (const k in R) out[k] = files[k] ? 'file' : 'synth'; return out; },
+    sources() { const out = {}; for (const k in R) out[k] = files[k] ? 'file' : NATIVE ? (NATIVE[k] ? 'system' : 'none') : 'synth'; return out; },
+    native: () => !!NATIVE,
     names: () => Object.keys(R),
     toggle() { const on = !(navOn || fxOn); navOn = fxOn = on; store.set('sound', on); store.set('sound.fx', on); hint(on ? 'Звуки интерфейса включены' : 'Звуки интерфейса выключены', 1500); if (on) sound.select(); window.dispatchEvent(new Event('soundprefs')); },
     isOn: () => navOn,

@@ -12,6 +12,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.drawable.Drawable;
+import android.media.AudioManager;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
@@ -317,6 +318,24 @@ final class Bridge {
         ResolveInfo home = pm.resolveActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY);
         if (home != null) o.put("home", home.loadLabel(pm).toString());
         return o.toString();
+    }
+
+    /**
+     * Android's own UI sounds (as any native launcher plays them): the focus tick, the click, keyboard keys.
+     * vol 0..1 is the launcher's "interface sounds" level; 0.8 (its default) is the system's usual level.
+     */
+    @JavascriptInterface
+    public void sound(String name, float vol) {
+        int fx;
+        switch (name) {
+            case "tick": fx = AudioManager.FX_FOCUS_NAVIGATION_DOWN; break;
+            case "select": fx = AudioManager.FX_KEY_CLICK; break;
+            case "key": fx = AudioManager.FX_KEYPRESS_STANDARD; break;
+            case "del": fx = AudioManager.FX_KEYPRESS_DELETE; break;
+            default: return;
+        }
+        AudioManager am = act.getSystemService(AudioManager.class);
+        if (am != null && vol > 0) am.playSoundEffect(fx, Math.min(1f, 0.5f * vol / 0.8f));
     }
 
     @JavascriptInterface

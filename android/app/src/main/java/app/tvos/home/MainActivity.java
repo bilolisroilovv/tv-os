@@ -63,6 +63,11 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(false);
         s.setTextZoom(100);
         s.setSupportZoom(false);
+        // The page lays out at 1920 CSS px (its viewport meta) and the WebView shows it zoomed out to the screen,
+        // so everything is rasterised at the screen's own resolution (a CSS scale() would make Chrome rasterise
+        // at twice the size and shrink it on every frame).
+        s.setUseWideViewPort(true);
+        s.setLoadWithOverviewMode(true);
         s.setOffscreenPreRaster(true); // the next frames are rasterised ahead: smoother on a slow GPU
         web.setWebViewClient(new WebViewClient() {
             @Override

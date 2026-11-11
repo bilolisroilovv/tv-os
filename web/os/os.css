@@ -251,6 +251,8 @@
 #stage.fast .osswitch .swbg { backdrop-filter: none; -webkit-backdrop-filter: none; background: linear-gradient(rgba(0,0,0,.5), rgba(0,0,0,.5)), var(--blur, none) center/cover, #111; }
 
 /* ---------- nothing hidden is painted: off-screen and transparent panels drop out of rendering ---------- */
+/* Spinners and the caret only run while they can be seen (an endless animation keeps the GPU busy). */
+#launch:not(.open) .spin, .osboot:not(.on) .spin, .oskb:not(.on) .car, .osapp:not(.on) .spin { animation: none !important; }
 #saver:not(.on) { visibility: hidden; transition: opacity 1.2s ease, visibility 0s linear 1.2s; }
 #picker:not(.on) { visibility: hidden; transition: transform var(--dur-panel) var(--ease-panel), visibility 0s linear .6s; }
 #toast:not(.on) { visibility: hidden; transition: transform var(--dur-panel) var(--ease-panel), opacity .3s ease, visibility 0s linear .5s; }
