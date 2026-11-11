@@ -1,0 +1,8 @@
+# TCL Google TV: promos, recommendation rows and auto-installs.
+com.tcl.waterfall.overseas                 # recommendation "waterfall"
+com.tcl.dashboard                          # TCL Home panel with promos
+com.tcl.partnercustomizer                  # TCL rows on the Google TV home screen
+com.tcl.messagebox                         # pushed promo messages
+com.tcl.tv.tclhome_passive                 # TCL home content at boot
+com.tcl.esticker                           # retail demo sticker
+android.autoinstalls.config.google.gtvpai  # partner app auto-installs

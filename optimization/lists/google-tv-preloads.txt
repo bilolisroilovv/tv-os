@@ -1,0 +1,6 @@
+# Preloaded apps often unused. Only disable the ones the owner does not use.
+com.netflix.ninja                          # Netflix
+com.amazon.amazonvideo.livingroom          # Prime Video
+com.google.android.youtube.tvmusic         # YouTube Music
+com.google.android.play.games              # Play Games
+com.google.android.videos                  # Google TV (movies store)

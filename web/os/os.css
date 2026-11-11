@@ -1,0 +1,263 @@
+/* System layer of the launcher: Settings, alerts, the on-screen keyboard, the app switcher and the
+   accessibility looks. Everything is laid out in TV pixels (1920x1080), like the rest of the stage. */
+
+/* ---------- stacking over the home screen ---------- */
+#launch { z-index: 20; }
+.osapp { z-index: 30; }
+#stage.ccover #shade { z-index: 34; }
+#stage.ccover #hud { z-index: 35; transform: none !important; opacity: 1 !important; }
+#stage.ccover #clock, #stage.ccover #place { opacity: 0 !important; }
+#stage.ccover #cc { z-index: 36; }
+#stage.ccover.ccopen #shade { background: radial-gradient(1400px 1000px at 100% 0%, rgba(0,0,0,.62) 0%, rgba(0,0,0,.32) 55%, rgba(0,0,0,.14) 85%); }
+#stage.ccover .osapp .sr.on { transform: none; } #stage.ccover .osapp .sr.on::before { opacity: .45; box-shadow: none; }
+.osswitch { z-index: 40; }
+#toast { z-index: 60; }
+.osalert, .oskb { z-index: 70; }
+#saver { z-index: 100; }
+.osboot { z-index: 150; }
+#bright { z-index: 200 !important; }
+
+/* ---------- shared colours (light / dark appearance) ---------- */
+#stage { --os-label: #1d1d1f; --os-sec: rgba(60,60,67,.6); --os-ter: rgba(60,60,67,.3); --os-fill: rgba(120,120,128,.16);
+         --os-red: #ff3b30; --os-blue: #007aff; --os-green: #34c759; }
+#stage.dark { --os-label: #f5f5f7; --os-sec: rgba(235,235,245,.6); --os-ter: rgba(235,235,245,.3); --os-fill: rgba(120,120,128,.32);
+              --os-red: #ff453a; --os-blue: #0a84ff; --os-green: #30d158; }
+
+/* ---------- Settings ---------- */
+.osapp { position: absolute; inset: 0; visibility: hidden; color: var(--os-label); overflow: hidden; }
+.osapp.on { visibility: visible; }
+.osapp .sbg { position: absolute; inset: 0; background: #d9dbe0; }
+#stage.dark .osapp .sbg { background: #111114; }
+.osapp .sbg .layer { position: absolute; inset: 0; background: center/cover no-repeat; opacity: 0; transition: opacity .8s ease; transform: scale(1.08); }
+.osapp .sbg .layer.on { opacity: 1; }
+.osapp .sfrost { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(246,246,250,.66), rgba(236,237,242,.78)); transition: background .5s; }
+#stage.dark .osapp .sfrost { background: linear-gradient(180deg, rgba(14,14,18,.62), rgba(8,8,10,.76)); }
+.osapp .sbody { position: absolute; inset: 0; }
+
+.osapp .stitle { position: absolute; left: 0; right: 0; top: 54px; height: 64px; }
+.osapp .stitle span { position: absolute; left: 0; right: 0; text-align: center; font-size: 46px; font-weight: 600; letter-spacing: -.4px; white-space: nowrap;
+                      transition: opacity .3s ease, transform var(--dur-panel) var(--ease-panel); }
+.osapp .stitle span.out { opacity: 0; }
+
+/* left: the big picture for the focused section */
+.osapp .sart { position: absolute; left: 90px; top: 150px; width: 820px; height: 860px; }
+.osapp .sa { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0;
+             transform: scale(.94); transition: opacity .35s ease, transform var(--dur-panel) var(--ease-panel); }
+.osapp .sa.on { opacity: 1; transform: none; }
+.sglyph { position: relative; width: 400px; height: 400px; border-radius: 104px; display: grid; place-items: center; color: #fff;
+          background: linear-gradient(160deg, var(--gc1), var(--gc2));
+          box-shadow: inset 0 3px 0 rgba(255,255,255,.45), inset 0 -2px 0 rgba(0,0,0,.12), 0 40px 70px -20px rgba(0,0,0,.45), 0 12px 24px rgba(0,0,0,.12); }
+.sglyph::before { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 3px; pointer-events: none;
+                  background: linear-gradient(135deg, rgba(255,255,255,.85), rgba(255,255,255,.1) 30%, rgba(255,255,255,0) 55%, rgba(255,255,255,.35));
+                  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.sglyph::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+                 background: radial-gradient(120% 80% at 30% -10%, rgba(255,255,255,.42), rgba(255,255,255,0) 55%); }
+.sglyph svg { position: relative; z-index: 1; width: 220px; height: 220px; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round;
+              filter: drop-shadow(0 4px 10px rgba(0,0,0,.18)); }
+.sacap { margin-top: 46px; text-align: center; max-width: 760px; }
+.sacap b { display: block; font-size: 38px; font-weight: 600; letter-spacing: -.3px; }
+.sacap span { display: block; margin-top: 10px; font-size: 25px; color: var(--os-sec); line-height: 1.35; }
+.sprev { width: 720px; height: 405px; border-radius: 34px; background: #222 center/cover no-repeat; box-shadow: 0 40px 70px -24px rgba(0,0,0,.55), 0 10px 22px rgba(0,0,0,.14);
+         position: relative; overflow: hidden; }
+.sprev::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 2px rgba(255,255,255,.18); }
+.sprev.contain { background-size: 82% auto; }
+.sprev .badge { position: absolute; left: 24px; bottom: 22px; padding: 8px 18px; border-radius: 20px; background: rgba(0,0,0,.42); color: #fff; font-size: 21px; font-weight: 600;
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+/* the TV itself (About) */
+.stv { position: relative; width: 700px; height: 470px; }
+.stv .bez { position: absolute; left: 0; top: 0; width: 700px; height: 404px; border-radius: 14px; background: #0c0c0e; padding: 9px;
+            box-shadow: 0 40px 70px -24px rgba(0,0,0,.6), inset 0 0 0 1.5px #333; }
+.stv .scr { width: 100%; height: 100%; border-radius: 6px; background: #1a1a1d center/cover no-repeat; position: relative; overflow: hidden; }
+.stv .scr::after { content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,.16), rgba(255,255,255,0) 40%); }
+.stv .logo { position: absolute; left: 0; right: 0; top: 409px; text-align: center; font-size: 11px; letter-spacing: 3px; font-weight: 700; color: #9a9aa0; }
+.stv .leg { position: absolute; top: 404px; width: 16px; height: 62px; background: linear-gradient(180deg, #2c2c30, #18181a); border-radius: 0 0 6px 6px; }
+.stv .leg.l { left: 110px; transform: skewX(14deg); } .stv .leg.r { right: 110px; transform: skewX(-14deg); }
+
+/* right: the list */
+.osapp .spages { position: absolute; left: 960px; top: 138px; width: 880px; bottom: 0; }
+.osapp .spage { position: absolute; inset: 0; overflow: hidden;
+                -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 70px), transparent 100%);
+                mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 70px), transparent 100%);
+                transition: opacity .3s ease, transform var(--dur-panel) var(--ease-panel); }
+.osapp .spage.left { opacity: 0; transform: translateX(-70px); }
+.osapp .spage.right { opacity: 0; transform: translateX(70px); }
+.osapp .sinner { position: absolute; left: 34px; right: 34px; top: 30px; transition: transform var(--dur-scroll) var(--ease-scroll); }
+
+.sr { position: relative; height: 74px; margin: 0 0 6px; padding: 0 30px; border-radius: 22px; display: flex; align-items: center; gap: 20px;
+      font-size: 30px; font-weight: 500; letter-spacing: -.2px; white-space: nowrap; isolation: isolate;
+      transition: transform var(--dur-focus) var(--ease-focus), color .18s ease; }
+/* The white focus platter is drawn once and only fades (no background/shadow repaint while it animates). */
+.sr::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: #fff; z-index: -1; opacity: 0; transition: opacity .18s ease;
+              box-shadow: 0 22px 44px -10px rgba(0,0,0,.34), 0 6px 14px rgba(0,0,0,.1); }
+.sr.on::before { opacity: 1; }
+.sr .st { overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+.sr .ss { font-size: 22px; color: var(--os-sec); margin-left: -6px; overflow: hidden; text-overflow: ellipsis; }
+.sr.two { height: 92px; }
+.sr.two .stx { display: flex; flex-direction: column; min-width: 0; }
+.sr.two .stx .ss { margin: 3px 0 0; }
+.sr .sv { margin-left: auto; padding-left: 20px; font-size: 28px; color: var(--os-sec); flex: none; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+.sr .ck { width: 30px; flex: none; display: grid; place-items: center; color: var(--os-blue); }
+.sr .ck svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.sr .ck.end { margin-left: auto; }
+.sr .sv + .ck.end { margin-left: 16px; }
+.sr .ico { flex: none; width: 76px; height: 46px; border-radius: 10px; background: #333 center/cover no-repeat; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+.sr .gi { flex: none; width: 34px; height: 34px; display: grid; place-items: center; color: var(--os-sec); }
+.sr .gi svg, .sr .gl2 svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sr .gl2 { margin-left: 14px; display: flex; gap: 10px; color: var(--os-sec); flex: none; }
+.sr .ava { flex: none; width: 56px; height: 56px; border-radius: 28px; display: grid; place-items: center; font-size: 26px; font-weight: 600; color: #fff;
+           background: linear-gradient(160deg, var(--gc1, #8e8e93), var(--gc2, #636366)); }
+.sr .spin { width: 30px; height: 30px; margin: 0; border-width: 3px; flex: none; border-color: var(--os-ter); border-top-color: var(--os-label); }
+.sr.on { color: #1d1d1f; transform: scale(1.055); z-index: 2; }
+.sr.on .sv, .sr.on .ss, .sr.on .gi, .sr.on .gl2 { color: rgba(29,29,31,.56); }
+.sr.on .ck { color: #007aff; }
+.sr.on .spin { border-color: rgba(0,0,0,.14); border-top-color: #1d1d1f; }
+.sr.red .st { color: var(--os-red); } .sr.red.on .st { color: #d70015; }
+.sr.blue .st { color: var(--os-blue); } .sr.blue.on .st { color: #0062cc; }
+.sr.dim { color: var(--os-sec); }
+.sr.dim.on { color: rgba(29,29,31,.6); }
+.sr.ctr { justify-content: center; } .sr.ctr .st { flex: none; }
+.sr.press { transform: scale(1.0); transition-duration: 90ms; }
+/* range rows: a slim bar that fills, arrows adjust it */
+.sr.range .sbar { position: absolute; left: 30px; right: 30px; bottom: 11px; height: 6px; border-radius: 3px; background: var(--os-fill); overflow: hidden; opacity: .9; }
+.sr.range .sbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--os-label); transition: width .3s cubic-bezier(.2,.9,.3,1); }
+.sr.range.on .sbar { background: rgba(0,0,0,.1); } .sr.range.on .sbar i { background: #1d1d1f; }
+.sr.range { padding-bottom: 8px; }
+.sr.range .arr { display: none; font-size: 24px; color: rgba(29,29,31,.4); margin-left: 12px; }
+.sr.range.on .arr { display: inline; }
+.sh { padding: 34px 30px 10px; font-size: 25px; font-weight: 500; color: var(--os-sec); }
+.sh:first-child { padding-top: 6px; }
+.sf { padding: 6px 30px 20px; font-size: 23px; line-height: 1.38; color: var(--os-sec); white-space: normal; }
+.sgap { height: 34px; }
+
+/* ---------- alerts (tvOS: full-screen blur, centred text, a column of buttons) ---------- */
+.osalert, .oskb { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .28s ease, visibility 0s linear .3s; color: var(--os-label); }
+.osalert.on, .oskb.on { opacity: 1; visibility: visible; transition: opacity .28s ease; }
+.osveil { position: absolute; inset: 0; background: rgba(236,236,242,.62); backdrop-filter: blur(44px) saturate(1.6); -webkit-backdrop-filter: blur(44px) saturate(1.6); }
+#stage.dark .osveil { background: rgba(10,10,12,.58); }
+.osalert .abox { position: absolute; left: 50%; top: 50%; width: 1000px; transform: translate(-50%, -50%) scale(1.06); text-align: center;
+                 transition: transform var(--dur-panel) var(--ease-panel); }
+.osalert.on .abox { transform: translate(-50%, -50%); }
+.osalert .aic { width: 120px; height: 120px; margin: 0 auto 30px; border-radius: 30px; background: center/cover no-repeat; display: grid; place-items: center; }
+.osalert .aic:empty { display: none; }
+.osalert .aic svg { width: 72px; height: 72px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.osalert h2 { margin: 0 0 18px; font-size: 48px; font-weight: 700; letter-spacing: -.5px; }
+.osalert p { margin: 0 auto; max-width: 860px; font-size: 29px; line-height: 1.42; color: var(--os-sec); }
+.osalert .abtns { margin-top: 56px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.abtn { width: 600px; height: 86px; border-radius: 24px; display: grid; place-items: center; font-size: 31px; font-weight: 600; background: var(--os-fill);
+        transition: transform var(--dur-focus) var(--ease-focus), background .2s, color .2s, box-shadow .3s; }
+.abtn.on { background: #fff; color: #1d1d1f; transform: scale(1.08); box-shadow: 0 22px 44px -10px rgba(0,0,0,.36); }
+.abtn.red { color: var(--os-red); } .abtn.red.on { color: #d70015; }
+
+/* ---------- on-screen keyboard (tvOS linear keyboard) ---------- */
+.oskb .ktitle { position: absolute; left: 0; right: 0; top: 160px; text-align: center; font-size: 44px; font-weight: 700; letter-spacing: -.4px; }
+.oskb .ksub { position: absolute; left: 0; right: 0; top: 230px; text-align: center; font-size: 27px; color: var(--os-sec); }
+.oskb .kfield { position: absolute; left: 410px; width: 1100px; top: 318px; height: 104px; border-radius: 26px; background: var(--os-fill); padding: 0 38px;
+                display: flex; align-items: center; font-size: 44px; font-weight: 500; overflow: hidden; white-space: pre;
+                box-shadow: inset 0 0 0 2px rgba(255,255,255,.08); }
+.oskb .kfield .ph { color: var(--os-ter); }
+.oskb .kfield .car { display: inline-block; width: 3px; height: 54px; margin-left: 2px; background: var(--os-blue); border-radius: 2px; animation: kblink 1.05s steps(1) infinite; vertical-align: middle; }
+@keyframes kblink { 50% { opacity: 0; } }
+.oskb .kshow { position: absolute; right: 446px; top: 352px; font-size: 22px; font-weight: 600; color: var(--os-sec); }
+.oskb .krow { position: absolute; left: 0; right: 0; top: 520px; height: 96px; display: flex; justify-content: center; align-items: center; }
+.oskb .kk { width: 51px; height: 92px; display: grid; place-items: center; font-size: 37px; font-weight: 500; border-radius: 18px; position: relative;
+            transition: transform var(--dur-focus) var(--ease-focus), background .14s, color .14s, box-shadow .2s; }
+.oskb .kk.on { background: #fff; color: #1d1d1f; transform: scale(1.34); box-shadow: 0 16px 30px -6px rgba(0,0,0,.38); z-index: 2; }
+.oskb .kk.sp { font-size: 22px; }
+.oskb .kctl { position: absolute; left: 0; right: 0; top: 672px; display: flex; justify-content: center; gap: 22px; }
+.oskb .kc { height: 76px; min-width: 120px; padding: 0 32px; border-radius: 38px; background: var(--os-fill); display: flex; align-items: center; justify-content: center; gap: 12px;
+            font-size: 27px; font-weight: 600; transition: transform var(--dur-focus) var(--ease-focus), background .14s, color .14s, box-shadow .2s; }
+.oskb .kc svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.oskb .kc.go { background: var(--os-blue); color: #fff; }
+.oskb .kc.on { background: #fff; color: #1d1d1f; transform: scale(1.1); box-shadow: 0 16px 30px -6px rgba(0,0,0,.36); }
+.oskb .kc.cur { box-shadow: inset 0 0 0 2.5px var(--os-label); }
+.oskb .kc.on.cur { box-shadow: 0 16px 30px -6px rgba(0,0,0,.36), inset 0 0 0 2.5px #1d1d1f; }
+.oskb .khint { position: absolute; left: 0; right: 0; bottom: 70px; text-align: center; font-size: 22px; color: var(--os-ter); }
+
+/* ---------- app switcher ---------- */
+.osswitch { position: absolute; inset: 0; visibility: hidden; }
+.osswitch.on { visibility: visible; }
+.osswitch .swbg { position: absolute; inset: 0; opacity: 0; transition: opacity .35s ease;
+                  background: rgba(0,0,0,.42); backdrop-filter: blur(36px) saturate(1.3); -webkit-backdrop-filter: blur(36px) saturate(1.3); }
+.osswitch.on .swbg { opacity: 1; }
+.osswitch .swtrack { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transition: transform var(--dur-scroll) var(--ease-scroll); }
+.swc { position: absolute; top: 300px; width: 1040px; height: 585px; transform: scale(.84); opacity: .62;
+       transition: transform var(--dur-focus) var(--ease-focus), opacity .3s ease, left var(--dur-scroll) var(--ease-scroll); }
+.swc.on { transform: scale(1); opacity: 1; }
+.swc .scr { position: absolute; inset: 0; border-radius: 42px; overflow: hidden; background: #0b0b0d; box-shadow: 0 50px 90px -30px rgba(0,0,0,.7), 0 0 0 2px rgba(255,255,255,.07); }
+.swc .scr > .snap { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; transform: scale(.5417); pointer-events: none; }
+.swc .scr .lban { position: absolute; left: 50%; top: 46%; width: 420px; height: 252px; margin: -126px 0 0 -210px; border-radius: 26px; background: center/cover; box-shadow: 0 26px 50px rgba(0,0,0,.45); }
+.swc .hd { position: absolute; left: 0; right: 0; top: -112px; display: flex; align-items: center; justify-content: center; gap: 20px; color: #fff;
+           font-size: 34px; font-weight: 600; text-shadow: 0 2px 14px rgba(0,0,0,.4); transition: opacity .3s; }
+.swc .hd i { width: 100px; height: 60px; border-radius: 14px; background: #333 center/cover no-repeat; box-shadow: 0 6px 16px rgba(0,0,0,.35); }
+.swc.gone { transition: transform .42s cubic-bezier(.4,0,.6,1), opacity .42s ease; transform: translateY(-900px) scale(.9) !important; opacity: 0 !important; }
+.osswitch .swempty { position: absolute; left: 0; right: 0; top: 500px; text-align: center; color: #fff; font-size: 38px; font-weight: 600; opacity: .8; }
+.osswitch .swempty span { display: block; margin-top: 12px; font-size: 25px; font-weight: 500; opacity: .7; }
+.osswitch .swhint { position: absolute; left: 0; right: 0; bottom: 64px; text-align: center; color: rgba(255,255,255,.6); font-size: 23px; }
+
+#saver.noclock .sclock { display: none; }
+
+/* ---------- reboot ---------- */
+.osboot { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s ease; display: grid; place-items: center; }
+.osboot.on { opacity: 1; }
+.osboot .spin { margin: 0; }
+
+/* ---------- accessibility looks ---------- */
+/* Bold Text */
+#stage.bold, #stage.bold * { font-weight: 700 !important; }
+#stage.bold #clock .time, #stage.bold #saver .stime { font-weight: 600 !important; }
+/* Reduce Transparency: glass becomes solid (also much lighter work for the TV's GPU) */
+#stage.solid .lg { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: rgba(232,232,237,.97) !important; color: #1d1d1f; }
+#stage.solid.dark .lg { background: rgba(44,44,46,.97) !important; color: #f5f5f7; }
+#stage.solid:not(.dark) .lg .row, #stage.solid:not(.dark) .lg h3, #stage.solid:not(.dark) #picker h2, #stage.solid:not(.dark) #picker .sub,
+#stage.solid:not(.dark) #seg, #stage.solid:not(.dark) .tile, #stage.solid:not(.dark) #toast, #stage.solid:not(.dark) #toast span,
+#stage.solid:not(.dark) #wifi .net { color: #1d1d1f; text-shadow: none; }
+#stage.solid:not(.dark) .bb svg, #stage.solid:not(.dark) .tile .ttip { stroke: #1d1d1f; }
+#stage.solid:not(.dark) .tile.slider .sic, #stage.solid:not(.dark) .tile.slider .slab, #stage.solid:not(.dark) .tile.slider .sval { color: #1d1d1f; }
+#stage.solid .osveil, #stage.solid .osswitch .swbg { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(236,236,242,.98); }
+#stage.solid.dark .osveil, #stage.solid.dark .osswitch .swbg { background: rgba(18,18,20,.98); }
+/* Increase Contrast */
+#stage.contrast { --os-sec: rgba(40,40,46,.86); --os-ter: rgba(40,40,46,.55); }
+#stage.contrast.dark { --os-sec: rgba(245,245,250,.86); --os-ter: rgba(245,245,250,.55); }
+#stage.contrast .sr.on::before, #stage.contrast .abtn.on, #stage.contrast .kc.on, #stage.contrast .row.on { box-shadow: 0 0 0 4px #1d1d1f, 0 20px 40px -10px rgba(0,0,0,.4); }
+#stage.contrast.dark .sr.on::before, #stage.contrast.dark .abtn.on, #stage.contrast.dark .kc.on, #stage.contrast.dark .row.on { box-shadow: 0 0 0 4px #fff, 0 20px 40px -10px rgba(0,0,0,.6); }
+#stage.contrast .app.focus .tilt { outline: 5px solid #fff; outline-offset: 5px; }
+#stage.contrast .label { text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 2px #000; }
+/* Reduce Motion: no wobble, no parallax, short cross-fades */
+#stage.still .app.moving .wig { animation: none; }
+#stage.still .spec { display: none; }
+
+/* ---------- fast mode (weak TVs): the same look from pre-made pictures, nothing re-rendered per frame ---------- */
+/* Liquid Glass: a pre-blurred copy of the wallpaper, lined up with the element's place on the stage, under the tint. */
+#stage.fast .lg { backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  background: linear-gradient(165deg, var(--lg-a), var(--lg-b) 52%, var(--lg-c)), var(--glass, none) var(--gx, 0px) var(--gy, 0px) / 1920px 1080px no-repeat, rgba(110,110,118,.28);
+  box-shadow: inset 0 1.5px 0 rgba(255,255,255,.5), inset 0 0 0 1.5px rgba(255,255,255,.16), 0 14px 40px rgba(0,0,0,.16); }
+#stage.fast .lg::before { display: none; }
+#stage.fast .bb.on, #stage.fast .bb.act { background: #fff; box-shadow: 0 14px 30px rgba(0,0,0,.28); }
+#stage.fast .tile.on { box-shadow: inset 0 2px 0 rgba(255,255,255,.85), inset 0 -1px 0 rgba(255,255,255,.3), 0 22px 44px rgba(0,0,0,.32); }
+#stage.fast.grid #platter { box-shadow: inset 0 1.5px 0 rgba(255,255,255,.9), 0 18px 40px rgba(0,0,0,.08); }
+#stage.fast .tile svg, #stage.fast .sglyph svg { filter: none; }
+/* App icons: rim without a mask, highlight without a blend mode. */
+#stage.fast .rim { -webkit-mask: none; mask: none; padding: 0; background: none; box-shadow: inset 0 0 0 2px rgba(255,255,255,.22); }
+#stage.fast .app.focus .rim { box-shadow: inset 0 0 0 2px rgba(255,255,255,.5); }
+#stage.fast .spec { mix-blend-mode: normal; }
+#stage.fast .app.focus .spec { opacity: .5; }
+/* Settings, alerts, keyboard, app switcher. */
+#stage.fast .osapp .spage { -webkit-mask-image: none; mask-image: none; }
+#stage.fast .sglyph::before { display: none; }
+#stage.fast .sglyph { box-shadow: inset 0 3px 0 rgba(255,255,255,.45), inset 0 0 0 2px rgba(255,255,255,.2), 0 30px 60px -20px rgba(0,0,0,.45); }
+#stage.fast .sprev .badge { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0,0,0,.62); }
+#stage.fast .osveil { backdrop-filter: none; -webkit-backdrop-filter: none; background: linear-gradient(rgba(236,236,242,.78), rgba(236,236,242,.78)), var(--blur, none) center/cover, #e6e6eb; }
+#stage.fast.dark .osveil { background: linear-gradient(rgba(10,10,12,.74), rgba(10,10,12,.74)), var(--blur, none) center/cover, #111; }
+#stage.fast .osswitch .swbg { backdrop-filter: none; -webkit-backdrop-filter: none; background: linear-gradient(rgba(0,0,0,.5), rgba(0,0,0,.5)), var(--blur, none) center/cover, #111; }
+
+/* ---------- nothing hidden is painted: off-screen and transparent panels drop out of rendering ---------- */
+#saver:not(.on) { visibility: hidden; transition: opacity 1.2s ease, visibility 0s linear 1.2s; }
+#picker:not(.on) { visibility: hidden; transition: transform var(--dur-panel) var(--ease-panel), visibility 0s linear .6s; }
+#toast:not(.on) { visibility: hidden; transition: transform var(--dur-panel) var(--ease-panel), opacity .3s ease, visibility 0s linear .5s; }
+.pop:not(.on) { visibility: hidden; transition: opacity .24s ease, transform var(--dur-panel) var(--ease-panel), visibility 0s linear .5s; }
+.osapp .spage { contain: strict; }
+
+/* ---------- frame counter ---------- */
+.osfps { position: absolute; left: 24px; top: 20px; z-index: 210; padding: 8px 16px; border-radius: 14px; background: rgba(0,0,0,.72); color: #fff;
+         font: 500 20px/1.2 -apple-system, system-ui, sans-serif; font-variant-numeric: tabular-nums; display: none; pointer-events: none; }
+.osfps.on { display: block; } .osfps b { font-size: 24px; color: #30d158; } .osfps.bad b { color: #ff9f0a; }

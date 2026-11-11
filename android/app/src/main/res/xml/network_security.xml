@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Apple's Aerial video server (sylvan.apple.com) is signed by "Apple Root CA", which older Android versions do
+     not carry. Trusted here for that one host only; everything else uses the system's certificates as usual. -->
+<network-security-config>
+    <domain-config>
+        <domain includeSubdomains="false">sylvan.apple.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/apple_root_ca" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

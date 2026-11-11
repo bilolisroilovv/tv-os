@@ -1,0 +1,18 @@
+# Made on your own computer (tools/aerials.py, tools/import-sounds.sh): Apple's catalog, photos, sound files
+web/data/aerials.js
+web/assets/wallpapers/*
+!web/assets/wallpapers/README.md
+web/assets/sounds/*
+!web/assets/sounds/README.md
+
+# Android build
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+
+# tools/tv.sh remembers the TV's previous home screen here
+.tv-previous-home
+tv-shot.png
+.DS_Store

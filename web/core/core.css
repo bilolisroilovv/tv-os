@@ -1,0 +1,18 @@
+/* Shared base: a black page with one 1920x1080 TV stage scaled to fit (see core.js). */
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+body { -webkit-font-smoothing: antialiased; cursor: default; user-select: none; }
+#stage {
+  position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; transform-origin: 0 0;
+  background: #000; color: #fff;
+  font-family: -apple-system, "SF Pro Display", BlinkMacSystemFont, "Helvetica Neue", Inter, system-ui, sans-serif;
+}
+#stage * { box-sizing: border-box; }
+.tvc-hint {
+  position: fixed; left: 16px; bottom: 16px; z-index: 1000; max-width: 92vw;
+  padding: 10px 16px; border-radius: 14px; font: 13px/1.6 -apple-system, system-ui, sans-serif; color: #e9e9ee;
+  background: rgba(20, 20, 26, .78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, .08); box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+  opacity: 0; transform: translateY(8px); transition: opacity .35s, transform .35s; pointer-events: none;
+}
+.tvc-hint.on { opacity: 1; transform: none; }
+.tvc-hint b { color: #fff; font-weight: 600; }

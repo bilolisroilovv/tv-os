@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The launcher itself is the web/ folder of this repository: it is packed into the APK as its assets.
+android {
+    namespace 'app.tvos.home'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'app.tvos.home'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs = ['../../web']
+        }
+    }
+
+    androidResources {
+        // dev/ (screenshot mode) and the README files are not needed on the TV.
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:<dir>dev:*.md'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // Installed over ADB, never published: signed with this computer's debug key.
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

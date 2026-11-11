@@ -1,0 +1,9 @@
+# TCL Google TV: background services. Each one is a feature: keep those you use (ask the owner!).
+com.tcl.MultiScreenInteraction_TV          # MagiConnect (phone remote app)
+com.tcl.miracast                           # screen mirroring (Miracast)
+com.google.android.apps.mediashell         # Chromecast built-in
+com.google.android.katniss                 # Google Assistant / voice search
+com.tcl.assistant                          # TCL voice service
+com.google.android.tv.assistant            # assistant LED service
+com.tcl.t_solo                             # T-Solo (Bluetooth headphones mode)
+com.tcl.android.webview                    # TCL support browser (the system WebView stays)

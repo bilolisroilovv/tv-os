@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 16:9 Android TV banner: a dusk gradient with four rounded app tiles. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="320dp" android:height="180dp" android:viewportWidth="320" android:viewportHeight="180">
+    <path android:pathData="M0,0h320v180h-320z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="320" android:endY="180">
+                <item android:offset="0" android:color="#FF7597DE" />
+                <item android:offset="0.55" android:color="#FF6A3093" />
+                <item android:offset="1" android:color="#FFD53A9D" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#E6FFFFFF" android:pathData="M112,52h40a8,8 0,0 1,8 8v24a8,8 0,0 1,-8 8h-40a8,8 0,0 1,-8 -8v-24a8,8 0,0 1,8 -8z" />
+    <path android:fillColor="#99FFFFFF" android:pathData="M176,52h40a8,8 0,0 1,8 8v24a8,8 0,0 1,-8 8h-40a8,8 0,0 1,-8 -8v-24a8,8 0,0 1,8 -8z" />
+    <path android:fillColor="#99FFFFFF" android:pathData="M112,104h40a8,8 0,0 1,8 8v24a8,8 0,0 1,-8 8h-40a8,8 0,0 1,-8 -8v-24a8,8 0,0 1,8 -8z" />
+    <path android:fillColor="#99FFFFFF" android:pathData="M176,104h40a8,8 0,0 1,8 8v24a8,8 0,0 1,-8 8h-40a8,8 0,0 1,-8 -8v-24a8,8 0,0 1,8 -8z" />
+</vector>

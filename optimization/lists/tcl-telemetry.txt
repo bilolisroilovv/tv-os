@@ -1,0 +1,6 @@
+# TCL Google TV: telemetry and analytics. Safe to disable; also stops TCL's firmware-update service (com.tcl.ttvs).
+com.tcl.ttvs                               # TCL analytics (and the firmware updater)
+com.tcl.guard                              # TGuard tracking / "cleaner"
+com.tcl.useragreement                      # data-sharing agreement for ttvs
+com.google.android.feedback                # Google feedback reports
+com.google.android.partnersetup            # Google partner setup
