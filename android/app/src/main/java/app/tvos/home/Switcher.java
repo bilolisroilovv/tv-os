@@ -165,10 +165,46 @@ final class Switcher {
         if (i < ids.size()) OS.speak(h.byId.containsKey(ids.get(i)) ? h.byId.get(ids.get(i)).name : "");
     }
 
+    /**
+     * Apps used in the last hours, oldest first, as Android counted them (also those started by the remote's own
+     * buttons). Empty without the usage-access permission (tools/tv.sh install grants it).
+     */
+    private List<String> usedLately() {
+        java.util.HashMap<String, Long> when = new java.util.HashMap<>();
+        List<String> out = new ArrayList<>();
+        try {
+            android.app.usage.UsageStatsManager um = h.act.getSystemService(android.app.usage.UsageStatsManager.class);
+            long now = System.currentTimeMillis();
+            android.app.usage.UsageEvents ev = um.queryEvents(now - 6 * 3600_000L, now);
+            android.app.usage.UsageEvents.Event e = new android.app.usage.UsageEvents.Event();
+            while (ev.hasNextEvent()) {
+                ev.getNextEvent(e);
+                if (e.getEventType() != android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) continue;
+                String p = e.getPackageName();
+                if (p.equals(h.act.getPackageName()) || !h.byId.containsKey(p)) continue;
+                out.remove(p);
+                if (!OS.closedAfter(p, e.getTimeStamp())) { out.add(p); when.put(p, e.getTimeStamp()); } // not closed since
+            }
+        } catch (RuntimeException ignored) {
+            // no usage access: only the apps opened from the launcher
+        }
+        // and the apps the launcher opened itself (Settings among them), all in the order they were last used
+        for (String id : OS.recents()) {
+            if (!h.byId.containsKey(id)) continue;
+            long t = Math.max(OS.usedAt(id), when.containsKey(id) ? when.get(id) : 0);
+            out.remove(id);
+            out.add(id);
+            when.put(id, t);
+        }
+        out.sort((a, b) -> Long.compare(when.get(a), when.get(b)));
+        return out;
+    }
+
     void open() {
         if (layer != null) return;
         ids = new ArrayList<>();
-        for (String id : OS.recents()) if (h.byId.containsKey(id)) ids.add(id);
+        ids.addAll(usedLately());
+        while (ids.size() > 10) ids.remove(0);
         for (Card c : cards) root.removeView(c);
         cards.clear();
         Card settingsCard = null;
@@ -310,6 +346,13 @@ final class Switcher {
         });
         OS.forget(id);
         if ("settings".equals(id)) { h.settings.reset(); forgetSettings(); }
+        else {
+            // as on Apple TV: the app is really closed (its process, now in the background, lets its memory go)
+            Apps.App a = h.byId.get(id);
+            if (a != null && a.pkg != null && !a.pkg.isEmpty()) {
+                try { h.act.getSystemService(android.app.ActivityManager.class).killBackgroundProcesses(a.pkg); } catch (SecurityException ignored) { }
+            }
+        }
         Tv.later(380, () -> {
             root.removeView(c);
             int k = cards.indexOf(c);

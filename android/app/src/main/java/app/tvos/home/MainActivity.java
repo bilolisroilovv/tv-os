@@ -172,7 +172,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (resumed && Intent.ACTION_MAIN.equals(intent.getAction())) act("home");
+        if (!Intent.ACTION_MAIN.equals(intent.getAction())) return;
+        // Android pauses the activity for a moment before handing it a new intent, so "on screen" is the test
+        if (visible) act("home");
+        else home.homeFromApp(); // from an app: a second press right after it opens the app switcher
     }
 
     // ---------- lifecycle: nothing runs while another app is in front ----------

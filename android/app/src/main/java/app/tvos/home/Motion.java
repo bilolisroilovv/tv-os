@@ -28,12 +28,12 @@ final class Motion implements Choreographer.FrameCallback {
     private static final Motion I = new Motion();
     private final ArrayList<Anim> list = new ArrayList<>();
     private final ArrayList<Anim> tmp = new ArrayList<>();
-    private boolean posted;
+    private boolean posted, inFrame;
     private long last;
 
     static void start(Anim a) {
         if (!I.list.contains(a)) I.list.add(a);
-        if (!I.posted) {
+        if (!I.posted && !I.inFrame) { // during a frame the frame itself posts the next one (once)
             I.posted = true;
             I.last = 0;
             Choreographer.getInstance().postFrameCallback(I);
@@ -55,6 +55,7 @@ final class Motion implements Choreographer.FrameCallback {
 
     private void frame(long now) {
         posted = false;
+        inFrame = true;
         float dt = last == 0 ? 1 / 60f : Math.min(0.05f, (now - last) / 1e9f);
         last = now;
         tmp.clear();
@@ -70,9 +71,9 @@ final class Motion implements Choreographer.FrameCallback {
             }
             if (!more) list.remove(a);
         }
+        inFrame = false;
         if (!list.isEmpty()) {
-            posted = true;
-            Choreographer.getInstance().postFrameCallback(this);
+            if (!posted) { posted = true; Choreographer.getInstance().postFrameCallback(this); }
         } else last = 0;
     }
 

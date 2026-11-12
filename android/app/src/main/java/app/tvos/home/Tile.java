@@ -19,7 +19,7 @@ import android.view.View;
  * The view is larger than the icon by M on every side, so the shadows are inside its bounds.
  */
 final class Tile extends View {
-    static final int IW = 315, IH = 189, M = 120;
+    static final int IW = 315, IH = 189, M = 170; // the view reaches past the icon by M: room for the focused icon's wide shadow
     static final float R = 28, FS = 1.14f;
 
     Apps.App app;
@@ -45,10 +45,11 @@ final class Tile extends View {
         setWillNotDraw(false);
         if (rest == null) {
             int ink = 0xff000000, blue = Tv.rgba(30, 40, 60, 1);
-            rest = new Gfx.Shadow(IW, IH, R, ink, new float[][]{{0, 14, 24, -8, .34f}, {0, 3, 8, 0, .12f}});
-            restLight = new Gfx.Shadow(IW, IH, R, blue, new float[][]{{0, 16, 26, -8, .32f}, {0, 3, 8, 0, .10f}});
-            liftS = new Gfx.Shadow(IW, IH, R, ink, new float[][]{{0, 40, 50, -16, .55f}, {0, 16, 32, 0, .22f}});
-            liftLight = new Gfx.Shadow(IW, IH, R, blue, new float[][]{{0, 44, 54, -16, .48f}, {0, 18, 34, 0, .18f}});
+            // as on Apple TV: a small soft shadow under every icon, and a large, very soft one under the focused icon
+            rest = new Gfx.Shadow(IW, IH, R, ink, new float[][]{{0, 10, 22, -4, .30f}, {0, 3, 7, 0, .10f}});
+            restLight = new Gfx.Shadow(IW, IH, R, blue, new float[][]{{0, 10, 22, -4, .26f}, {0, 3, 7, 0, .08f}});
+            liftS = new Gfx.Shadow(IW, IH, R, ink, new float[][]{{0, 42, 90, -4, .48f}, {0, 18, 34, -2, .18f}});
+            liftLight = new Gfx.Shadow(IW, IH, R, blue, new float[][]{{0, 42, 90, -4, .38f}, {0, 18, 34, -2, .14f}});
         }
         setOutlineProvider(null);
         setPivotX(M + IW / 2f);
@@ -186,7 +187,7 @@ final class Tile extends View {
             p.setShader(null);
         }
         // highlight (fast mode: normal blending at half strength)
-        float sa = lift * 0.5f;
+        float sa = lift * 0.62f;
         if (sa > 0.004f && !Motion.still) {
             float cx = l + IW * .26f + sx, cy = t - IH * .16f + sy;
             RadialGradient g = Gfx.radial(cx, cy, IW * 1.2f, IH * .9f,
@@ -195,13 +196,22 @@ final class Tile extends View {
             c.drawRoundRect(box, R, R, p);
             p.setShader(null);
         }
-        // rim
+        // Apple TV's focused icon: no outline, but its glass edge catches the light — a thin rim, bright where the
+        // light comes from (top left), fading to nothing, with a faint glint on the opposite corner. It turns with
+        // the tilt. Only the focused icon has it; resting icons have no edge at all.
         p.setStyle(Paint.Style.STROKE);
-        p.setStrokeWidth(2);
-        p.setColor(Tv.white(Tv.lerp(.22f * .45f, .5f, lift)));
-        tmp.set(box);
-        tmp.inset(1, 1);
-        c.drawRoundRect(tmp, R - 1, R - 1, p);
+        if (lift > 0.01f && !Theme.contrast) {
+            float ang = 140 + ry / 6f * 50 - rx / 6f * 30;
+            p.setShader(Gfx.linear(ang, l, t, IW, IH, new int[]{Tv.white(.85f), Tv.white(.08f), Tv.white(0), Tv.white(.32f)}, new float[]{0, .3f, .6f, 1}));
+            p.setColor(0xff000000);
+            p.setAlpha(Math.round(255 * Math.min(1, lift)));
+            p.setStrokeWidth(2.5f);
+            tmp.set(box);
+            tmp.inset(1.25f, 1.25f);
+            c.drawRoundRect(tmp, R - 1.25f, R - 1.25f, p);
+            p.setShader(null);
+            p.setAlpha(255);
+        }
         if (contrastRing && lift > 0.01f) {
             p.setStrokeWidth(5);
             p.setColor(Tv.white(lift));

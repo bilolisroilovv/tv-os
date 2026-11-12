@@ -41,6 +41,8 @@ case "${1:-}" in
     adb_ install -r "$apk"
     # Only so that Settings can show the Wi-Fi network's name (Android hides it from apps otherwise).
     adb_ shell pm grant $PKG android.permission.ACCESS_FINE_LOCATION 2>/dev/null || true
+    # So that the app switcher (Home twice) lists the apps used lately, also those opened by the remote's buttons.
+    adb_ shell appops set $PKG GET_USAGE_STATS allow 2>/dev/null || true
     echo "Установлено. Сделать главным экраном: tools/tv.sh home";;
   home)
     remember_home

@@ -25,11 +25,24 @@ final class OS {
 
     private static final ArrayList<String> recents = new ArrayList<>();
 
-    static void recent(String id) { recents.remove(id); recents.add(id); }
+    private static final java.util.HashMap<String, Long> closed = new java.util.HashMap<>();
+
+    private static final java.util.HashMap<String, Long> usedAt = new java.util.HashMap<>();
+
+    static void recent(String id) { recents.remove(id); recents.add(id); closed.remove(id); usedAt.put(id, System.currentTimeMillis()); }
+
+    /** When the launcher last opened it (0: not in this run). */
+    static long usedAt(String id) { Long t = usedAt.get(id); return t == null ? 0 : t; }
 
     static List<String> recents() { return new ArrayList<>(recents); }
 
-    static void forget(String id) { recents.remove(id); }
+    /** Closed in the app switcher: not shown again until it is used again (Android's history still lists it). */
+    static void forget(String id) { recents.remove(id); closed.put(id, System.currentTimeMillis()); }
+
+    static boolean closedAfter(String id, long usedAt) {
+        Long t = closed.get(id);
+        return t != null && t >= usedAt;
+    }
 
     // ---------- VoiceOver: speech only while the setting is on (the engine is not even started otherwise) ----------
 

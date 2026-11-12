@@ -1467,6 +1467,15 @@ final class Home {
 
     private long lastHome;
 
+    /** Home was pressed in another app (it brought the launcher back): the next press soon after = switcher. */
+    void homeFromApp() {
+        long now = SystemClock.uptimeMillis();
+        if (now - lastHome < 600) pendingSwitcher = true; // both presses came before the home screen was back
+        lastHome = now;
+    }
+
+    private boolean pendingSwitcher;
+
     void key(String a) {
         armIdle();
         if ("saver".equals(mode)) { stopSaver(); return; }
@@ -1477,7 +1486,7 @@ final class Home {
         switch (a) {
             case "home": {
                 long now = SystemClock.uptimeMillis();
-                boolean dbl = now - lastHome < 450;
+                boolean dbl = now - lastHome < 600; // twice quickly: the app switcher (also right after leaving an app)
                 lastHome = now;
                 if (dbl) { openSwitcher(); return; }
                 closeAll();
@@ -1615,6 +1624,7 @@ final class Home {
     }
 
     void onResume() {
+        if (pendingSwitcher) { pendingSwitcher = false; Tv.post(this::openSwitcher); return; }
         if (appsDirty && !"os".equals(mode)) { appsDirty = false; loadApps(false); }
         if ("launch".equals(mode)) closeApp();
     }

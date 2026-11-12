@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- A launcher lists every app, and Settings shows which packages are disabled. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- App switcher: closing an app's card also lets its process go (only while it is in the background). -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+    <!-- App switcher: the apps used lately, also those opened by the remote's own buttons (tools/tv.sh grants it). -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
