@@ -36,6 +36,7 @@ final class Prefs {
         DEF.put("wallpaper", "");
         DEF.put("saverType", "aerial");
         DEF.put("saverAfter", 2);
+        DEF.put("saverEvery", 60); // seconds per Aerial film (0 = the whole film)
         DEF.put("saverClock", true);
         DEF.put("saverCaps", true);
         DEF.put("saverCats", "[\"Landscapes\",\"Cities\",\"Space\",\"Underwater\"]");

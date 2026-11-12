@@ -37,6 +37,7 @@ final class Apps {
         boolean tv; // a TV app (has a Leanback entry and is not another home screen)
         Bitmap banner;  // ~384 px wide, for the grid
         File big;       // 640 px wide, for big pictures (launch, Settings)
+        String asset;   // a banner of this computer's own (assets/icons/<package>.png) instead of the app's
         int[] color = {120, 120, 140};
         String tagline;
     }
@@ -44,7 +45,7 @@ final class Apps {
     /** Not shown as tiles: Android's own TV settings open from the launcher's Settings instead. */
     private static final Set<String> SKIP = new HashSet<>(List.of("com.android.tv.settings"));
 
-    static App settingsApp() {
+    static App settingsApp(Context ctx) {
         App a = new App();
         a.id = "settings";
         a.pkg = "";
@@ -53,7 +54,40 @@ final class Apps {
         a.tagline = "Настройки лаунчера и ТВ";
         a.banner = settingsBanner(384, 216);
         a.color = new int[]{150, 156, 165};
+        own(ctx, a);
         return a;
+    }
+
+    private static org.json.JSONObject names;
+
+    /** A banner (and name) of this computer's own for the app, if web/assets/icons has one: assets/icons/. */
+    private static void own(Context ctx, App a) {
+        String path = "icons/" + a.id + ".png";
+        try (java.io.InputStream in = ctx.getAssets().open(path)) {
+            Bitmap b = BitmapFactory.decodeStream(in);
+            if (b != null) {
+                if (a.banner != null && "settings".equals(a.id)) a.banner.recycle();
+                a.banner = scaled(b, 384);
+                a.asset = path;
+                a.color = Gfx.color(a.banner);
+            }
+        } catch (Exception ignored) {
+            return; // none: the app's own banner
+        }
+        try {
+            if (names == null) {
+                try (java.io.InputStream in = ctx.getAssets().open("icons/names.json")) {
+                    java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+                    byte[] buf = new byte[4096];
+                    for (int n; (n = in.read(buf)) > 0; ) o.write(buf, 0, n);
+                    names = new org.json.JSONObject(o.toString("UTF-8"));
+                }
+            }
+            String n = names.optString(a.id, null);
+            if (n != null && !n.isEmpty()) a.name = n;
+        } catch (Exception ignored) {
+            names = new org.json.JSONObject();
+        }
     }
 
     /** Scans the installed apps (background thread). */
@@ -98,6 +132,7 @@ final class Apps {
                 }
                 a.big = f;
                 a.color = Gfx.color(a.banner);
+                own(ctx, a);
                 list.add(a);
             } catch (Throwable skipped) {
                 // an app that went away meanwhile, or a drawable that cannot be drawn
@@ -182,6 +217,14 @@ final class Apps {
 
     /** The big banner (640 px) for the launch screen and Settings (background thread). */
     static Bitmap big(App a) {
+        if (a.asset != null) {
+            try (java.io.InputStream in = Tv.app.getAssets().open(a.asset)) {
+                Bitmap b = BitmapFactory.decodeStream(in);
+                if (b != null) return b;
+            } catch (Exception ignored) {
+                // fall back to the app's own
+            }
+        }
         if (a.big != null && a.big.isFile()) {
             Bitmap b = BitmapFactory.decodeFile(a.big.getPath());
             if (b != null) return b;

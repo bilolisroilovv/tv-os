@@ -32,6 +32,7 @@ final class Glyphs {
         SRC.put("wifi3", "<path d=\"M2.5 9.2a14 14 0 0 1 19 0\"/><path d=\"M5.6 12.6a9.4 9.4 0 0 1 12.8 0\"/><path d=\"M8.8 16a4.8 4.8 0 0 1 6.4 0\"/>");
         SRC.put("input", "<rect x=\"3\" y=\"5\" width=\"18\" height=\"12\" rx=\"2.5\"/><path d=\"M8.5 20h7M12 17v3\"/>");
         SRC.put("sound", "<path d=\"M4 9.5h4l5-4v13l-5-4H4z\"/><path d=\"M16.5 9a4.5 4.5 0 0 1 0 6\"/><path d=\"M19 6.5a8 8 0 0 1 0 11\"/>");
+        SRC.put("mute", "<path d=\"M4 9.5h4l5-4v13l-5-4H4z\"/><path d=\"M16.5 9.5l5 5M21.5 9.5l-5 5\"/>");
         SRC.put("timer", "<circle cx=\"12\" cy=\"13\" r=\"8\"/><path d=\"M12 9v4l2.5 2.5M10 2.8h4\"/>");
         SRC.put("photo", "<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2.5\"/><circle cx=\"9\" cy=\"10\" r=\"1.8\"/><path d=\"M21 16l-5-5-8 8\"/>");
         SRC.put("ccsaver", "<path d=\"M3 16.5l5-5.5 4 4 3-3 6 5.5\"/><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2.5\"/>");

@@ -35,7 +35,7 @@ final class Picker {
         sheet = root.add(new Views.Box(c, (cv, v) -> paintSheet(cv)), 0, 0, W + 2 * MG, HT + 2 * MG);
         // thumbnails ride on a track that scrolls sideways; the visible strip is clipped like overflow: hidden
         Views.Abs clipBox = new Views.Abs(c);
-        clipBox.setClipChildren(true);
+        clipBox.setClipBounds(new android.graphics.Rect(0, -30, W, 270 + 40)); // inside the glass sheet
         root.add(clipBox, MG, MG + 140, W, 270);
         track = clipBox.add(new Views.Abs(c), 0, 0, 40 * 370 + 400, 270);
         // segmented options: "Оформление: Светлое Тёмное   Часы: По центру Слева"

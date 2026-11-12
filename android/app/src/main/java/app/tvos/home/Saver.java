@@ -149,8 +149,9 @@ final class Saver {
                 int k = -1;
                 for (int i = 0; i < p.a.poiT.length; i++) if (p.a.poiT[i] <= t) k = i;
                 if (k != p.lastPoi) { p.lastPoi = k; caption(p.a.name, k >= 0 ? p.a.poi[k] : p.a.name); }
-                // at most 5 minutes per film; the next one starts loading early so the cross-fade is seamless
-                if (dur > 0 && p.mp.getCurrentPosition() > Math.min(dur - 1500, 300000)) { playNext(); return; }
+                // the next film every minute (Settings -> Screen saver), or when this one ends
+                int every = Prefs.i("saverEvery") * 1000, pos = p.mp.getCurrentPosition();
+                if (dur > 0 && pos > (every > 0 ? Math.min(dur - 1500, every) : dur - 1500)) { playNext(); return; }
             } catch (IllegalStateException ignored) {
                 // player being released
             }
@@ -233,7 +234,8 @@ final class Saver {
             Wallpapers.W w = ws.get(sIdx++ % ws.size());
             showPhoto(w.id, true);
             caption(w.name, w.place);
-            Tv.later(32000, this);
+            int every = Prefs.i("saverEvery");
+            Tv.later(every > 0 ? Math.min(every, 60) * 1000L : 32000, this);
         }
     };
 

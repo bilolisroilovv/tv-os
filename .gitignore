@@ -16,3 +16,6 @@ android/local.properties
 .tv-previous-home
 tv-shot.png
 .DS_Store
+
+# Private app icons for this TV only (never published)
+web/assets/icons/*

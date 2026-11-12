@@ -40,7 +40,15 @@ final class Home {
 
     static float py(int i) { return rowTop(i / COLS); }
 
-    static float pageY(int r) { return r == 0 ? 0 : -(rowTop(r) - 560); }
+    /**
+     * In the grid the dock rises to the top of the screen, whole (as on tvOS); further rows scroll a row at a time,
+     * so the dock leaves the screen whole too instead of being cut by its edge.
+     */
+    static float pageY(int r) {
+        if (r == 0) return 0;
+        float dockTop = -(766 - 40);
+        return r <= 2 ? dockTop : dockTop - (r - 2) * PITCH;
+    }
 
     // ---------- views ----------
     final Views.Box back, shelf, shade, clock, place, barTime, toast, launch, brightV;
@@ -164,7 +172,7 @@ final class Home {
         String keep = list.isEmpty() || cur >= list.size() ? null : list.get(cur);
         apps.clear();
         apps.addAll(found);
-        apps.add(Apps.settingsApp());
+        apps.add(Apps.settingsApp(act));
         byId.clear();
         for (Apps.App a : apps) byId.put(a.id, a);
         // saved order first (apps that are gone drop out), newly installed apps at the end
@@ -361,7 +369,11 @@ final class Home {
     // wallpaper
     // =====================================================================================================
 
-    Bitmap blur48, glass26;
+    Bitmap blur48, glass26, midBlur;
+    // back from an app: the photo comes into focus (blurred -> slightly soft -> sharp) while it settles from 1.08 to 1
+    private boolean pulling;
+    private float pullK, pullScale = 1;
+    private Motion.Run pullRun;
     private Bitmap shelfA, shelfB, backA, backB;
     private float shelfFade = 1, backFade = 1, luma = 0.4f;
     private String wpId;
@@ -382,6 +394,7 @@ final class Home {
             small.recycle();
             Bitmap full = Wallpapers.full(id);
             r[4] = bake(full, center, (Float) r[2] > 0.55f);
+            r[3] = midBlur(full);
             Tv.free(full); // 8 MB: not kept, the clock's shade is baked from a fresh decode if it moves
             r[5] = backImage((Bitmap) r[0], dark);
             return r;
@@ -392,6 +405,7 @@ final class Home {
             previewing = null;
             blur48 = (Bitmap) r[0];
             glass26 = (Bitmap) r[1];
+            midBlur = (Bitmap) r[3];
             luma = (Float) r[2];
             Gfx.setGlass(glass26);
             Gfx.adaptGlass(luma > 0.55f);
@@ -447,6 +461,14 @@ final class Home {
         return b;
     }
 
+    /** The photo slightly out of focus (640x360): the middle step when the picture comes back into focus. */
+    private static Bitmap midBlur(Bitmap full) {
+        Bitmap b = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888);
+        Wallpapers.drawCover(new Canvas(b), full, -8, -8, 656, 376, new Paint(Paint.FILTER_BITMAP_FLAG));
+        Gfx.blur(b, 2.4f);
+        return b;
+    }
+
     /** The grid background: the blurred photo (scaled 1.08) with the frost over it, baked small (it is all soft). */
     private static Bitmap backImage(Bitmap blur, boolean dark) {
         int w = blur.getWidth(), h = blur.getHeight();
@@ -479,11 +501,11 @@ final class Home {
     private void swapShelf(Bitmap b, boolean instant) {
         if (shelfRun != null) shelfRun.cancel();
         if (shelfA == null && blur48 != null && wpShownOnce) {
-            // back from an app: the blurred copy stood in while the photo was decoded; the photo fades in over it
+            // back from an app: the blurred copy stood in while the photo was decoded; now it comes into focus
             shelfA = b;
             shelfB = null;
-            shelfFade = 0;
-            shelfRun = Motion.run(300, Tv.EASE, k -> { shelfFade = k; shelf.invalidate(); }).then(() -> { shelfFade = 1; shelf.invalidate(); });
+            shelfFade = 1;
+            startPull();
             return;
         }
         wpShownOnce = true;
@@ -565,7 +587,44 @@ final class Home {
     private final Paint bp = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final RectF full = new RectF(0, 0, Tv.W, Tv.H);
 
+    private static final Tv.Ease PULL_FOCUS = new Tv.Ease(.4f, 0, .2f, 1), PULL_ZOOM = new Tv.Ease(.16f, 1, .3f, 1);
+
+    /** The blurred stand-in, a little closer, until the photo is ready (the activity just came back). */
+    private void holdPull() {
+        if (pullRun != null) pullRun.cancel();
+        pulling = true;
+        pullK = 0;
+        pullScale = Motion.still ? 1 : 1.08f;
+        shelf.invalidate();
+    }
+
+    private void startPull() {
+        if (!pulling) holdPull();
+        if (pullRun != null) pullRun.cancel();
+        float s0 = pullScale;
+        pullRun = Motion.run(Motion.still ? 300 : 1100, Tv.LINEAR, t -> {
+            pullK = PULL_FOCUS.at(t);
+            pullScale = s0 + (1 - s0) * PULL_ZOOM.at(t);
+            shelf.invalidate();
+        }).then(() -> { pulling = false; pullScale = 1; shelf.invalidate(); coverBack(); });
+    }
+
+    private static float smooth(float x) { x = Tv.clamp(x, 0, 1); return x * x * (3 - 2 * x); }
+
+    private void drawPull(Canvas c) {
+        int save = c.save();
+        c.scale(pullScale, pullScale, Tv.W / 2f, Tv.H / 2f);
+        // two steps, never more than two full-screen pictures at a time: blurred -> soft, then soft -> sharp
+        float aMid = midBlur == null ? 1 : smooth(pullK / .45f), aSharp = shelfA == null ? 0 : smooth((pullK - .45f) / .55f);
+        Bitmap under = aMid >= 1 && midBlur != null ? midBlur : blur48;
+        if (under != null && aSharp < 1) { bp.setAlpha(255); c.drawBitmap(under, null, full, bp); }
+        if (aMid > 0 && aMid < 1 && midBlur != null) { bp.setAlpha(Math.round(255 * aMid)); c.drawBitmap(midBlur, null, full, bp); }
+        if (aSharp > 0 && shelfA != null) { bp.setAlpha(Math.round(255 * aSharp)); c.drawBitmap(shelfA, null, full, bp); }
+        c.restoreToCount(save);
+    }
+
     private void drawShelf(Canvas c) {
+        if (pulling) { drawPull(c); return; }
         if (shelfA == null || shelfB == null && shelfFade < 1) {
             // no photo yet (just back from an app): its blurred copy
             if (blur48 != null) { bp.setAlpha(255); c.drawBitmap(blur48, null, full, bp); }
@@ -1277,10 +1336,8 @@ final class Home {
             launchP.setShader(null);
         }
         launchT.setTextAlign(Paint.Align.CENTER);
-        launchS.setTextAlign(Paint.Align.CENTER);
-        float y = 1080 * .76f + 68;
-        c.drawText(a.name, 960, Tv.baseline(launchT, y, Tv.lineNormal(launchT)), launchT);
-        c.drawText("Приложение открыто · «Назад» — вернуться на главный экран", 960, Tv.baseline(launchS, y + Tv.lineNormal(launchT) + 12, Tv.lineNormal(launchS)), launchS);
+        launchT.setShadowLayer(Tv.blurRadius(18), 0, 2, Tv.black(.4f));
+        c.drawText(a.name, 960, Tv.baseline(launchT, b.bottom + 34, Tv.lineNormal(launchT)), launchT); // the name under the logo
     }
 
     // =====================================================================================================
@@ -1536,7 +1593,7 @@ final class Home {
         Tv.cancel(ticker);
         long now = System.currentTimeMillis();
         Tv.later(60000 - now % 60000 + 50, ticker);
-        if (shelfA == null && wpId != null) reloadShelf();
+        if (shelfA == null && wpId != null) { holdPull(); reloadShelf(); }
         armIdle();
     }
 

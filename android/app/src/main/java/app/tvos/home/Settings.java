@@ -448,7 +448,7 @@ final class Settings {
                 head("Звуки интерфейса"),
                 tog("Щелчки при навигации", () -> Prefs.b("sound"), v -> Prefs.set("sound", v)),
                 tog("Звуковые эффекты", () -> Prefs.b("sound.fx"), v -> { Prefs.set("sound.fx", v); if (v) Tv.later(120, Sounds::chime); }),
-                R("Набор звуков").val(() -> Sounds.system() ? "Системные Android" : "TV OS").go("sounds"),
+                R("Набор звуков").val(Sounds::setName).go("sounds"),
                 R("Громкость звуков").range(new Range(0, 100, 10, () -> Prefs.i("sound.vol"), v -> Prefs.set("sound.vol", v), v -> v > 0 ? v + "%" : "Выкл.")),
                 foot("Щелчки звучат при перемещении фокуса, нажатиях и вводе текста. Эффекты — короткие сигналы «готово» и «ошибка».")));
     }
@@ -457,17 +457,25 @@ final class Settings {
         return new Page("Набор звуков", r -> G("sound", C_PINK), () -> {
             List<Row> rs = new ArrayList<>();
             rs.add(head("Набор"));
-            rs.add(R("TV OS").vs("мягкие щелчки в духе Apple TV").ck(() -> !Sounds.system()).act(() -> setSoundSet("tvos")));
-            rs.add(R("Системные Android").vs("щелчки самого ТВ").ck(Sounds::system).act(() -> setSoundSet("system")));
+            for (String[] st : Sounds.SETS) {
+                String id = st[0];
+                rs.add(R(st[2]).vs(st[3]).ck(() -> id.equals(Prefs.s("sound.set")) || "tvos".equals(id) && !isSet(Prefs.s("sound.set")))
+                        .act(() -> setSoundSet(id)));
+            }
             rs.add(head("Звуки (OK — прослушать)"));
             for (String[] s : Sounds.NAMES) {
                 String k = s[0];
                 rs.add(R(s[1]).val(() -> Sounds.system() && !("tick".equals(k) || "select".equals(k) || "key".equals(k) || "del".equals(k)) ? "Без звука" : "")
                         .quiet().act(() -> Sounds.play(k)));
             }
-            rs.add(foot("Звуки TV OS сделаны для этого лаунчера: короткие и мягкие, как на Apple TV, и не нагружают ТВ. Панели и меню открываются без звука."));
+            rs.add(foot("Наборы TV OS, «Стекло» и «Мягкий» сделаны для этого лаунчера: короткие, как на Apple TV, и не нагружают ТВ. Выберите набор и послушайте его в списке выше. Панели и меню открываются без звука."));
             return rs;
         });
+    }
+
+    private static boolean isSet(String v) {
+        for (String[] s : Sounds.SETS) if (s[0].equals(v)) return true;
+        return false;
     }
 
     private void setSoundSet(String v) {
@@ -493,6 +501,7 @@ final class Settings {
                 pchoiceI("Начинать через", "saverAfter", new Object[][]{{0, "Никогда"}, {2, "2 минуты"}, {5, "5 минут"}, {10, "10 минут"}, {15, "15 минут"}, {30, "30 минут"}}, null, null),
                 R("Просмотр").act(() -> h.startSaver(false)),
                 head("Аэросъёмка"),
+                pchoiceI("Сменять видео", "saverEvery", new Object[][]{{60, "Каждую минуту"}, {120, "Каждые 2 минуты"}, {300, "Каждые 5 минут"}, {0, "Когда видео закончится"}}, null, null),
                 R("Темы").val(() -> {
                     List<String> on = Prefs.list("saverCats");
                     List<String[]> cs = cats();
@@ -804,7 +813,7 @@ final class Settings {
             arts[i].setScaleY(.94f);
         }
         pagesHost = root.add(new Views.Abs(c), LIST_X, LIST_Y, LIST_W, LIST_H);
-        pagesHost.setClipChildren(true);
+        pagesHost.setClipChildren(false); // each page clips itself, leaving room for the focused row's shadow
         root.setVisibility(View.INVISIBLE);
     }
 
@@ -1475,6 +1484,7 @@ final class Settings {
             this.parent = parent;
             view = pagesHost.add(new Views.Abs(h.act), 0, 0, LIST_W, LIST_H);
             view.overlapping = false;
+            view.setClipBounds(new android.graphics.Rect(-130, 0, LIST_W + 90, LIST_H));
             inner = view.add(new Views.Abs(h.act), IN_X, IN_Y, ROW_W, 4000);
             inner.overlapping = false;
         }

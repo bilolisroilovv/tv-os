@@ -95,8 +95,8 @@ final class Tile extends View {
     void focus(int dx, int dy) {
         if (Motion.still) { dx = 0; dy = 0; }
         vScale.snap(1.04f);
-        // CSS rotateY(dx*6deg) rotateX(-dy*6deg); Android's rotationY turns the other way round.
-        vRY.snap(-dx * 6);
+        // CSS rotateY(dx*6deg) rotateX(-dy*6deg): Android's rotations turn the same way (checked on the TV)
+        vRY.snap(dx * 6);
         vRX.snap(-dy * 6);
         vSX.snap(-dx * 56);
         vSY.snap(-dy * 34);
@@ -134,7 +134,7 @@ final class Tile extends View {
             float f = Motion.there(k);
             bx = dx * 12 * f;
             by = dy * 9 * f;
-            bry = -dx * 9 * f;
+            bry = dx * 9 * f;
             brx = -dy * 9 * f;
             apply();
         });

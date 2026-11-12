@@ -14,6 +14,12 @@ def packTvAssets = tasks.register('packTvAssets', Sync) {
         include 'aerials.js'
         into 'data'
     }
+    // Optional, made on this computer and never committed: banners and names that replace an app's own
+    // (web/assets/icons/<package>.png, names.json)
+    from('../../web/assets/icons') {
+        include '*.png', 'names.json'
+        into 'icons'
+    }
     into tvAssets
 }
 

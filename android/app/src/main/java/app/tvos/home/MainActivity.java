@@ -26,6 +26,7 @@ public class MainActivity extends Activity {
     boolean visible, resumed;
     private FrameLayout frame;
     private Fps fps;
+    private Volume volume;
 
     /** Installed, removed or updated apps: the tiles are rebuilt (now, or when the home screen is next shown). */
     private final BroadcastReceiver packages = new BroadcastReceiver() {
@@ -58,6 +59,7 @@ public class MainActivity extends Activity {
         setContentView(frame);
         home = new Home(this, stage);
         fps = new Fps(this);
+        volume = new Volume(home);
         Prefs.on("fps", () -> fps.set(Prefs.b("fps")));
         fps.set(Prefs.b("fps"));
         Bench.register(this);
@@ -137,6 +139,12 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_SETTINGS:
                 if (up && !e.isCanceled()) act("settings");
                 return true;
+            case KeyEvent.KEYCODE_VOLUME_UP:
+            case KeyEvent.KEYCODE_VOLUME_DOWN:
+            case KeyEvent.KEYCODE_VOLUME_MUTE:
+                // the launcher's own volume indicator (Android's panel stays for other apps)
+                if (volume != null && volume.key(e)) return true;
+                return super.dispatchKeyEvent(e);
             default:
                 return super.dispatchKeyEvent(e);
         }
