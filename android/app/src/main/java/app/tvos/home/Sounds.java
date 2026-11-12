@@ -41,12 +41,15 @@ final class Sounds {
     };
     private static String loaded;
 
-    static void init(Context c) {
-        am = c.getSystemService(AudioManager.class);
-        pool = new SoundPool.Builder().setMaxStreams(4).setAudioAttributes(new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build();
-        loadSet(c);
+    static void init(Context ctx) {
+        Context c = ctx.getApplicationContext();
+        if (pool == null) { // one pool for the life of the process
+            am = c.getSystemService(AudioManager.class);
+            pool = new SoundPool.Builder().setMaxStreams(4).setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()).build();
+            loadSet(c);
+        }
         Prefs.on("sound.set", () -> loadSet(c));
     }
 

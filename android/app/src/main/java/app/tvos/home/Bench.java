@@ -135,9 +135,14 @@ final class Bench {
             Tv.later(at, () -> a.act(x));
             at += gap;
         }
+        Frames f = frames;
         Tv.later(at + 900, () -> {
-            frames.on = false;
-            float[] s = stats(frames.take());
+            f.on = false;
+            float[] s = stats(f.take());
+            if (frames == f) { // the listener goes away once (runs that overlap share it)
+                frames = null;
+                try { a.getWindow().removeOnFrameMetricsAvailableListener(f); } catch (IllegalArgumentException ignored) { }
+            }
             Log.i("tvos-bench", String.format(Locale.ROOT, "%-9s frames %3.0f  fps %4.1f  p50 %5.1f ms  p95 %5.1f ms  max %5.1f ms  over16 %2.0f  dropped %2.0f",
                     name == null ? "bench" : name, s[0], s[1], s[2], s[3], s[4], s[5], s[6]));
         });

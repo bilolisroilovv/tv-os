@@ -255,7 +255,7 @@ final class Home {
         cur = Math.max(0, Math.min(k >= 0 ? k : cur, list.size() - 1));
         lastTop = Math.min(lastTop, Math.min(COLS, list.size()) - 1);
         if (cur / COLS != row) setRow(cur / COLS);
-        if ("home".equals(mode)) focusApp(cur, 0, 0);
+        if ("home".equals(mode) || "menu".equals(mode) || "move".equals(mode)) focusApp(cur, 0, 0);
         started = true;
     }
 
@@ -264,6 +264,11 @@ final class Home {
     List<String> appOrder() { return new ArrayList<>(order); }
 
     void setHidden(String id, boolean hide) {
+        if (hide && list.size() <= 1 && list.contains(id)) {
+            Sounds.error();
+            toast("Нельзя скрыть", "На главном экране должно остаться хотя бы одно приложение", null, "apps");
+            return;
+        }
         List<String> h = Prefs.list("hidden");
         h.remove(id);
         if (hide) h.add(id);
@@ -355,7 +360,8 @@ final class Home {
 
     /** The blurred background is only drawn while the sharp photo does not cover the screen. */
     void coverBack() {
-        boolean need = grid || shelf.getAlpha() < 0.999f || shelfFade < 1 || shelfB != null && shelfFade < 1;
+        if (covered) { back.setVisibility(View.INVISIBLE); return; }
+        boolean need = grid || shelf.getAlpha() < 0.999f || shelfFade < 1 || shelfB != null && shelfFade < 1 || pulling;
         if (need) Views.show(back); else Views.hide(back);
     }
 
@@ -433,8 +439,13 @@ final class Home {
         String id = previewing != null ? previewing : wpId;
         boolean center = "center".equals(Prefs.s("clock"));
         float l = luma;
+        int gen = wpGen;
         Tv.bg(() -> { Bitmap f = Wallpapers.full(id); Bitmap b = bake(f, center, l > 0.55f); Tv.free(f); return b; },
-                b -> { if (b != null) swapShelf(b, true); });
+                b -> {
+                    if (b == null) return;
+                    if (gen != wpGen) { Tv.free(b); return; } // a newer wallpaper came meanwhile
+                    swapShelf(b, true);
+                });
     }
 
     /**
@@ -454,6 +465,7 @@ final class Home {
         c.drawRect(0, 0, Tv.W, Tv.H * .2f, p);
         p.setShader(new LinearGradient(0, Tv.H, 0, Tv.H * .68f, Tv.black(.26f), Tv.black(0), Shader.TileMode.CLAMP));
         c.drawRect(0, Tv.H * .68f, Tv.W, Tv.H, p);
+        b.setHasAlpha(false); // opaque: copied, not blended
         if (Build.VERSION.SDK_INT >= 26) {
             Bitmap hw = b.copy(Bitmap.Config.HARDWARE, false);
             if (hw != null) { b.recycle(); return hw; }
@@ -466,6 +478,7 @@ final class Home {
         Bitmap b = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888);
         Wallpapers.drawCover(new Canvas(b), full, -8, -8, 656, 376, new Paint(Paint.FILTER_BITMAP_FLAG));
         Gfx.blur(b, 2.4f);
+        b.setHasAlpha(false);
         return b;
     }
 
@@ -480,6 +493,7 @@ final class Home {
         c.drawBitmap(blur, 0, 0, p);
         c.restore();
         frost(c, w, h, dark, p);
+        b.setHasAlpha(false);
         return b;
     }
 
@@ -662,7 +676,8 @@ final class Home {
         if (blur48 != null) {
             Bitmap src = blur48;
             boolean dark = Theme.dark;
-            Tv.bg(() -> backImage(src, dark), b -> swapBack(b, false));
+            int gen = wpGen;
+            Tv.bg(() -> backImage(src, dark), b -> { if (b != null && gen == wpGen) swapBack(b, false); });
         }
         platter.invalidate();
         settings.themeChanged();
@@ -1081,13 +1096,14 @@ final class Home {
 
     private void dimOthers(boolean on) {
         Tile focused = curTile();
-        for (Tile t : tiles.values()) if (t != focused && t.getVisibility() != View.GONE) Motion.tween(t, Motion.ALPHA, 350, Tv.EASE, on ? .42f : 1);
+        for (Tile t : tiles.values()) if (t != focused && t.getVisibility() != View.GONE) t.vDim.tween(350, Tv.EASE, on ? .42f : 1);
     }
 
     void closeMenu() {
         menu.show(false);
         dimOthers(false);
         mode = "home";
+        if (appsDirty) Tv.post(rescan);
     }
 
     void hideApp(Apps.App a) {
@@ -1109,6 +1125,7 @@ final class Home {
         if (t != null) t.jiggle(false);
         Prefs.set("order", order);
         Sounds.select();
+        if (appsDirty) Tv.post(rescan);
     }
 
     void moveTo(int j) {
@@ -1240,12 +1257,12 @@ final class Home {
             return;
         }
         Runnable go = () -> {
-            if (launched != a || !"launch".equals(mode)) return;
+            if (launched != a || !"launch".equals(mode) || launchClosing) return;
             zoom(launch, launchRect, true, false);
             zoomPage(true, false);
             // the real app starts as the zoom ends; coming back zooms it into its icon again
             Tv.later(430, () -> {
-                if ("launch".equals(mode) && launched == a && !Apps.launch(act, a.pkg)) {
+                if ("launch".equals(mode) && launched == a && !launchClosing && !Apps.launch(act, a.pkg)) {
                     closeApp();
                     toast("Не удалось открыть", a.name, a.banner, null);
                 }
@@ -1255,17 +1272,19 @@ final class Home {
     }
 
     void closeApp() {
-        if (launched == null || launchClosing) return;
+        if (launched == null || launchClosing || !"launch".equals(mode)) return;
         launchClosing = true;
         Sounds.back();
+        Apps.App which = launched;
         zoom(launch, launchRect != null ? launchRect : CENTER, false, false);
         zoomPage(false, false);
+        // the home screen has the remote again right away; the zoom back into the icon just plays out
+        mode = launchedFrom;
+        if ("home".equals(mode)) focusApp(cur, 0, 0); else paintBar();
         Tv.later(450, () -> {
+            if (launched != which || "launch".equals(mode)) return; // another app was opened meanwhile
             Views.hide(launch);
-            if (!"launch".equals(mode)) return;
-            mode = launchedFrom;
-            if ("home".equals(mode)) focusApp(cur, 0, 0); else paintBar();
-            if (launchBig != null && launched != null && launchBig != launched.banner) Tv.free(launchBig);
+            if (launchBig != null && launchBig != which.banner) Tv.free(launchBig);
             launchBig = null;
         });
     }
@@ -1280,6 +1299,7 @@ final class Home {
         page.setScaleY(1);
         mode = "home";
         updateCover();
+        if (appsDirty) { appsDirty = false; loadApps(false); }
         focusApp(cur, 0, 0);
     }
 
@@ -1369,6 +1389,7 @@ final class Home {
         Sounds.back();
         String to = osFrom;
         mode = to;
+        if (appsDirty) { appsDirty = false; loadApps(false); }
         updateCover();
         if ("home".equals(to)) focusApp(cur, 0, 0); else paintBar();
         settings.hide("home".equals(to) ? iconRectOf("settings") : null, false);
@@ -1398,7 +1419,16 @@ final class Home {
 
     void switcherClosed() { if ("home".equals(mode)) focusApp(cur, 0, 0); }
 
+    private boolean pendingSleep;
+
     void sleepNow() {
+        if (!act.visible) {
+            // the sleep timer ran out while an app was in front: back to the home screen, then black
+            pendingSleep = true;
+            Device.start(act, new android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME).setPackage(act.getPackageName()));
+            return;
+        }
+        if ("launch".equals(mode)) leaveApp();
         if ("saver".equals(mode)) { saver.black(); return; }
         startSaver(true);
     }
@@ -1407,6 +1437,7 @@ final class Home {
 
     void startSaver(boolean black) {
         if ("saver".equals(mode)) return;
+        if ("launch".equals(mode) && launchClosing) leaveApp();
         closeAll();
         saverFrom = mode;
         mode = "saver";
@@ -1425,16 +1456,24 @@ final class Home {
      * Nothing hidden is drawn: while Settings or the screen saver covers the screen, the home screen's layers are
      * taken out of rendering (the GPU of a TV pays for every full-screen layer it blends).
      */
+    boolean covered;
+
     void updateCover() {
         boolean modal = Modal.covers() || switcher.covers();
         // Settings under an alert, the keyboard or the app switcher is not drawn either
         if (settings.isOpen()) settings.root.setVisibility(modal ? View.INVISIBLE : View.VISIBLE);
-        boolean covered = settings.covers() && cc.over == null || saver.covers() || modal;
-        int v = covered ? View.INVISIBLE : View.VISIBLE;
-        shelf.setVisibility(v);
-        page.setVisibility(v);
-        if (cc.over == null) hud.setVisibility(v); else hud.setVisibility(View.VISIBLE);
-        if (covered) back.setVisibility(View.INVISIBLE); else coverBack();
+        covered = settings.covers() || saver.covers() || modal;
+        cover(shelf, covered);
+        cover(page, covered);
+        cover(hud, covered && cc.over == null); // Control Center over Settings: only the top bar is needed
+        if (covered) cover(back, true); else { back.setTag(R.id.covered, null); coverBack(); }
+    }
+
+    /** Hidden while covered, and kept hidden by any fade in flight (Motion's alpha setter reads the tag). */
+    private static void cover(View v, boolean on) {
+        v.setTag(R.id.covered, on ? Boolean.TRUE : null);
+        if (on) v.setVisibility(View.INVISIBLE);
+        else if (v.getAlpha() > 0.001f) v.setVisibility(View.VISIBLE);
     }
 
     void closeAll() {
@@ -1534,6 +1573,7 @@ final class Home {
                     inputs.focus(inI, inCur);
                     Sounds.select();
                     Tv.later(240, () -> {
+                        if (!"inputs".equals(mode)) return; // Back or Home was pressed meanwhile
                         closePop();
                         mode = "bar";
                         paintBar();
@@ -1573,7 +1613,7 @@ final class Home {
                 return;
             default: // home
                 if ("wallpapers".equals(a)) { picker.open(); return; }
-                if (list.isEmpty()) return; // the apps are still being read
+                if (list.isEmpty()) { if ("up".equals(a)) enterBar(); return; } // no apps (yet): the top bar still works
                 if (dir) {
                     if (dx != 0) {
                         int n = cur + dx;
@@ -1603,6 +1643,7 @@ final class Home {
     // =====================================================================================================
 
     void onStart() {
+        Modal.resume();
         tick();
         Tv.cancel(ticker);
         long now = System.currentTimeMillis();
@@ -1629,9 +1670,11 @@ final class Home {
     }
 
     void onResume() {
+        if (pendingSleep) { pendingSleep = false; if ("launch".equals(mode)) leaveApp(); Tv.post(this::sleepNow); return; }
         if (pendingSwitcher) { pendingSwitcher = false; Tv.post(this::openSwitcher); return; }
-        if (appsDirty && !"os".equals(mode)) { appsDirty = false; loadApps(false); }
         if ("launch".equals(mode)) closeApp();
+        if (appsDirty) Tv.later(600, rescan);
+        switcher.refreshUsage();
     }
 
     /** Another app is in front: no timers, no clock, no pictures the screen does not show. */
@@ -1653,14 +1696,24 @@ final class Home {
         if (launchBig != null && launched != null && launchBig != launched.banner) Tv.free(launchBig);
         launchBig = launched != null ? launched.banner : null;
         settings.trim();
+        switcher.leave();
         switcher.forgetSettings();
         Tv.later(1500, () -> { if (!act.visible) Runtime.getRuntime().gc(); });
     }
 
     boolean appsDirty;
 
-    void appsChanged() {
-        if (act.visible && !"os".equals(mode) && !"launch".equals(mode)) loadApps(false);
+    private final Runnable rescan = this::rescanNow;
+
+    private void rescanNow() {
+        if (act.visible && ("home".equals(mode) || "bar".equals(mode))) { appsDirty = false; loadApps(false); }
         else appsDirty = true;
+    }
+
+    /** Installed, removed or updated apps: one rescan for the 2-3 broadcasts an update sends, and never mid-move. */
+    void appsChanged() {
+        appsDirty = true;
+        Tv.cancel(rescan);
+        Tv.later(1500, rescan);
     }
 }

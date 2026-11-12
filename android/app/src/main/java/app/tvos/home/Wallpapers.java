@@ -82,6 +82,7 @@ final class Wallpapers {
 
     static void init(AssetManager am) {
         assets = am;
+        if (!PHOTOS.isEmpty() || !AERIALS.isEmpty()) return; // already read (the process outlived an activity)
         try {
             Object v = jsValue(read("wallpapers/list.js"), "TVWallpapers");
             if (v instanceof JSONArray) {
@@ -166,6 +167,8 @@ final class Wallpapers {
 
     static void onChange(Runnable r) { subs.add(r); }
 
+    static void clearListeners() { subs.clear(); }
+
     /** A photo for the cat of the screen saver's theme preview. */
     static String catPic(String cat) {
         for (W w : PHOTOS) if (cat.equals(w.cat)) return w.id;
@@ -238,6 +241,7 @@ final class Wallpapers {
         if (glass) p.setColorFilter(Gfx.saturateBrightness(1.6f, 1.06f));
         o.drawBitmap(work, new Rect(m + pad, m + pad, m + pad + W, m + pad + H), new Rect(0, 0, W, H), p);
         work.recycle();
+        out.setHasAlpha(false);
         return out;
     }
 

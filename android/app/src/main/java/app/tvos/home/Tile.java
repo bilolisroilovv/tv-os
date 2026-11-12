@@ -159,7 +159,7 @@ final class Tile extends View {
 
         @Override
         public boolean step(float dt) {
-            if (stop) { jig = 0; apply(); return false; }
+            if (stop || !isAttachedToWindow()) { jig = 0; apply(); return false; }
             t += dt;
             float ph = (t / 0.24f) % 2, x = ph < 1 ? ph : 2 - ph;
             jig = -1.4f + 2.8f * Tv.EASE_IN_OUT.at(x);
@@ -169,32 +169,48 @@ final class Tile extends View {
     }
 
     static boolean contrastRing;
+    private static RadialGradient GLOSS;
+    private final android.graphics.Matrix glossM = new android.graphics.Matrix();
+
+    /** Dimmed behind the icon menu: drawn fainter (a view alpha would cost an offscreen layer per icon). */
+    float dim = 1;
+    final Motion.Val vDim = new Motion.Val(1, 0.003f, v -> { dim = v; invalidate(); });
 
     @Override
     protected void onDraw(Canvas c) {
         float l = M, t = M, r = M + IW, b = M + IH;
-        (lightGrid ? restLight : rest).draw(c, l, t, r, b, 1, true);
-        if (lift > 0.003f) (lightGrid ? liftLight : liftS).draw(c, l, t, r, b, lift, true);
+        (lightGrid ? restLight : rest).draw(c, l, t, r, b, dim, true);
+        if (lift > 0.003f) (lightGrid ? liftLight : liftS).draw(c, l, t, r, b, lift * dim, true);
         p.setShader(null);
+        int fa = Math.round(255 * dim);
         if (faceAlpha) {
             p.setColor(0xff2a2a2e);
+            p.setAlpha(fa);
             c.drawRoundRect(box, R, R, p);
         }
         if (face != null) {
             p.setShader(face);
             p.setColor(0xff000000);
+            p.setAlpha(fa);
             c.drawRoundRect(box, R, R, p);
             p.setShader(null);
         }
+        p.setAlpha(255);
         // highlight (fast mode: normal blending at half strength)
         float sa = lift * 0.62f;
         if (sa > 0.004f && !Motion.still) {
             float cx = l + IW * .26f + sx, cy = t - IH * .16f + sy;
-            RadialGradient g = Gfx.radial(cx, cy, IW * 1.2f, IH * .9f,
-                    new int[]{Tv.white(.46f * sa), Tv.white(.1f * sa), Tv.white(0)}, new float[]{0, .36f, .58f});
-            p.setShader(g);
+            // one shared gradient, only moved and faded (nothing is allocated while the icon springs)
+            if (GLOSS == null) GLOSS = new RadialGradient(0, 0, IW * 1.2f, new int[]{Tv.white(.46f), Tv.white(.1f), Tv.white(0)}, new float[]{0, .36f, .58f}, android.graphics.Shader.TileMode.CLAMP);
+            glossM.setScale(1, IH * .9f / (IW * 1.2f));
+            glossM.postTranslate(cx, cy);
+            GLOSS.setLocalMatrix(glossM);
+            p.setShader(GLOSS);
+            p.setColor(0xff000000);
+            p.setAlpha(Math.round(255 * Math.min(1, sa) * dim));
             c.drawRoundRect(box, R, R, p);
             p.setShader(null);
+            p.setAlpha(255);
         }
         // Apple TV's focused icon: no outline, but its glass edge catches the light — a thin rim, bright where the
         // light comes from (top left), fading to nothing, with a faint glint on the opposite corner. It turns with

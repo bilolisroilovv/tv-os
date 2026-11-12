@@ -66,7 +66,7 @@ final class Gfx {
         private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
         private final Rect src = new Rect();
         private final RectF dst = new RectF();
-        private Shadow exact; // the same shadow rendered for the last small box it was asked for
+        private final Map<Long, Shadow> exact = new HashMap<>(); // the same shadow rendered for each small box size
 
         /** One layer: offset (dx, dy), blur, spread, colour with alpha. */
         Shadow(float dx, float dy, float blur, float spread, float radius, int color) {
@@ -135,9 +135,10 @@ final class Gfx {
             if (R - L < k * 2 + 1 || B - T < k * 2 + 1) {
                 // too small for nine pieces (a round button, a key): its own exact shadow, never a stretched one
                 int w = Math.round(r - l), ht = Math.round(b - t);
-                if (exact == null || exact.fw != w || exact.fh != ht) exact = new Shadow(w, ht, rad, color, layers);
-                exact.paint.setAlpha(paint.getAlpha());
-                exact.draw(c, l, t, l + w, t + ht, alpha, hollow);
+                long key = ((long) w << 32) | ht;
+                Shadow x = exact.get(key);
+                if (x == null) exact.put(key, x = new Shadow(w, ht, rad, color, layers));
+                x.draw(c, l, t, l + w, t + ht, alpha, hollow);
                 return;
             }
             piece(c, 0, 0, k, k, L, T, L + k, T + k);
@@ -220,12 +221,18 @@ final class Gfx {
             gen = glassGen; ka = a; kb = b; kc = cc; kw = w; kh = h; kx = sx; ky = sy;
             Shader tint = linear(165, 0, 0, w, h, new int[]{a, b, cc}, new float[]{0, .52f, 1});
             if (glassShader != null) {
-                Matrix m = new Matrix();
-                float s = (float) Tv.W / glassImage.getWidth();
-                m.setScale(s, s);
-                m.postTranslate(-sx, -sy);
-                BitmapShader bs = new BitmapShader(glassImage, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-                bs.setLocalMatrix(m);
+                // the wallpaper part is made once per wallpaper and place; a tint change only redoes the tint
+                if (bs == null || bsGen != glassGen || bsX != sx || bsY != sy) {
+                    Matrix m = new Matrix();
+                    float s = (float) Tv.W / glassImage.getWidth();
+                    m.setScale(s, s);
+                    m.postTranslate(-sx, -sy);
+                    bs = new BitmapShader(glassImage, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                    bs.setLocalMatrix(m);
+                    bsGen = glassGen;
+                    bsX = sx;
+                    bsY = sy;
+                }
                 fill.setShader(new ComposeShader(bs, tint, PorterDuff.Mode.SRC_OVER));
                 fill.setColor(0xff000000);
             } else {
@@ -243,6 +250,9 @@ final class Gfx {
         }
 
         private float cw, ch;
+        private BitmapShader bs;
+        private int bsGen = -1;
+        private float bsX, bsY;
 
         /** Draws at (x, y) in the canvas. */
         void draw(Canvas c, float x, float y) {
@@ -310,7 +320,7 @@ final class Gfx {
     /** The saturated average colour of a picture (for glows behind a launched app): web core.js TV.color. */
     static int[] color(Bitmap src) {
         if (src == null) return new int[]{120, 120, 140};
-        Bitmap b = Bitmap.createScaledBitmap(src.getConfig() == Bitmap.Config.HARDWARE ? src.copy(Bitmap.Config.ARGB_8888, false) : src, 32, 18, true);
+        Bitmap b = Bitmap.createScaledBitmap(android.os.Build.VERSION.SDK_INT >= 26 && src.getConfig() == Bitmap.Config.HARDWARE ? src.copy(Bitmap.Config.ARGB_8888, false) : src, 32, 18, true);
         int[] px = new int[32 * 18];
         b.getPixels(px, 0, 32, 0, 0, 32, 18);
         double r = 0, g = 0, bl = 0, n = 0;

@@ -71,7 +71,7 @@ final class Apps {
                 a.asset = path;
                 a.color = Gfx.color(a.banner);
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
             return; // none: the app's own banner
         }
         try {
@@ -120,15 +120,18 @@ final class Apps {
                 long stamp = pm.getPackageInfo(p, 0).lastUpdateTime;
                 File f = new File(dir, p + "-" + stamp + ".png");
                 keep.add(f.getName());
-                if (!f.exists()) {
+                if (f.exists()) a.banner = scaled(BitmapFactory.decodeFile(f.getPath()), 384); // null if the file is damaged
+                if (a.banner == null) {
                     Drawable banner = ri.activityInfo.loadBanner(pm);
                     if (banner == null) banner = ri.activityInfo.applicationInfo.loadBanner(pm);
                     Bitmap big = banner != null ? draw(banner, 640) : iconTile(ri.loadIcon(pm), a.name);
-                    try (FileOutputStream os = new FileOutputStream(f)) { big.compress(Bitmap.CompressFormat.PNG, 100, os); }
+                    // written whole, then renamed: a launcher killed mid-write never leaves a broken picture
+                    File tmp = new File(dir, f.getName() + ".tmp");
+                    try (FileOutputStream os = new FileOutputStream(tmp)) { big.compress(Bitmap.CompressFormat.PNG, 100, os); }
+                    //noinspection ResultOfMethodCallIgnored
+                    tmp.renameTo(f);
                     a.banner = scaled(big, 384);
-                    big.recycle();
-                } else {
-                    a.banner = scaled(BitmapFactory.decodeFile(f.getPath()), 384);
+                    if (a.banner != big) big.recycle();
                 }
                 a.big = f;
                 a.color = Gfx.color(a.banner);

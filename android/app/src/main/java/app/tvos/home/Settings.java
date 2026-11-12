@@ -688,12 +688,17 @@ final class Settings {
                 ptog("Субтитры по умолчанию", "subs")));
     }
 
+    private List<Device.Pkg> disabledPkgs;
+
     Page privacy() {
-        List<Device.Pkg> off = Device.disabled(h.act); // read once per opening of the page
+        // the disabled packages are read in the background (hundreds of them take a while); the page fills in after
+        Tv.bg(() -> Device.disabled(h.act), l -> { if (l != null) { disabledPkgs = l; refreshTop(); } });
         return new Page("Конфиденциальность и безопасность", r -> G("hand", C_BLUE), () -> {
+            List<Device.Pkg> off = disabledPkgs != null ? disabledPkgs : new ArrayList<>();
             List<Row> rs = new ArrayList<>();
             rs.add(head("Отключено на этом ТВ"));
-            if (off.isEmpty()) rs.add(R("Ничего не отключено").dim(() -> true));
+            if (disabledPkgs == null) rs.add(R("Загрузка…").dim(() -> true));
+            else if (off.isEmpty()) rs.add(R("Ничего не отключено").dim(() -> true));
             for (Device.Pkg p : off) rs.add(R(p.name != null && !p.name.isEmpty() ? p.name : p.pkg).sub(p.pkg).two().vs("Выкл."));
             rs.add(foot("Отключённые пакеты не запускаются и не занимают память. Как убрать рекламу, телеметрию и лишние службы — в optimization/README.md репозитория."));
             rs.add(sys("Разрешения приложений…", "apps", ""));
@@ -869,6 +874,7 @@ final class Settings {
         p.setShader(new LinearGradient(0, 0, 0, ht, dark ? Tv.rgba(14, 14, 18, .62f) : Tv.rgba(246, 246, 250, .66f),
                 dark ? Tv.rgba(8, 8, 10, .76f) : Tv.rgba(236, 237, 242, .78f), Shader.TileMode.CLAMP));
         c.drawRect(0, 0, w, ht, p);
+        b.setHasAlpha(false);
         return b;
     }
 
@@ -923,7 +929,18 @@ final class Settings {
 
     // ---------- the picture on the left ----------
 
-    private final Map<String, Bitmap> bigBanners = new HashMap<>();
+    /** The big banners shown on the left, the last few only (each is about 1 MB). */
+    private final java.util.LinkedHashMap<String, Bitmap> bigBanners = new java.util.LinkedHashMap<String, Bitmap>(8, .75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Bitmap> e) {
+            if (size() <= 4) return false;
+            Bitmap b = e.getValue();
+            boolean shown = false;
+            for (ArtView a : arts) if (a != null && a.pic == b) shown = true;
+            if (!shown) Tv.free(b);
+            return true;
+        }
+    };
     private static final Gfx.Shadow TILE_SHADOW = new Gfx.Shadow(0, 30, 60, -20, 104, Tv.black(.45f));
     private static final Gfx.Shadow PREV_SHADOW1 = new Gfx.Shadow(0, 40, 70, -24, 34, Tv.black(.55f));
     private static final Gfx.Shadow PREV_SHADOW2 = new Gfx.Shadow(0, 10, 22, 0, 34, Tv.black(.14f));
@@ -944,6 +961,9 @@ final class Settings {
             setPivotX(410);
             setPivotY(430);
         }
+
+        @Override
+        public boolean hasOverlappingRendering() { return false; } // its cross-fade needs no offscreen copy
 
         void set(Art s) {
             spec = s;
@@ -1581,7 +1601,7 @@ final class Settings {
     }
 
     private void say(Entry e) {
-        if (e.idx < 0 || e.idx >= e.rows.size()) return;
+        if (!open || e.idx < 0 || e.idx >= e.rows.size()) return; // not while pages are built in the background
         Row r = e.rows.get(e.idx);
         RowView v = e.els.get(e.idx);
         String val = v.value;

@@ -30,7 +30,9 @@ import java.util.Random;
 final class Saver {
     final Home h;
     final Views.Abs root;
-    private final Views.Box blackV, photos, shadeV, clockV, capV;
+    private final Views.Box blackV, shadeV, clockV, capV;
+    private final Views.Abs photos; // two pictures that cross-fade, each moved by its view's transform
+    private final Views.Box[] pv = new Views.Box[2];
     private Player cur, next;
     private boolean on, isBlack, photoMode;
     private List<Integer> order = new ArrayList<>();
@@ -44,7 +46,16 @@ final class Saver {
         root = new Views.Abs(c);
         root.overlapping = false; // fades piece by piece: no full-screen offscreen layer while it fades
         blackV = root.add(new Views.Box(c, (cv, v) -> cv.drawColor(0xff000000)), 0, 0, Tv.W, Tv.H);
-        photos = root.add(new Views.Box(c, (cv, v) -> drawPhotos(cv)), 0, 0, Tv.W, Tv.H);
+        photos = root.add(new Views.Abs(c), 0, 0, Tv.W, Tv.H);
+        photos.overlapping = false;
+        for (int i = 0; i < 2; i++) {
+            final int k = i;
+            pv[i] = photos.add(new Views.Box(c, (cv, v) -> drawPic(cv, k)), 0, 0, Tv.W, Tv.H);
+            pv[i].setPivotX(Tv.W / 2f);
+            pv[i].setPivotY(Tv.H / 2f);
+            pv[i].setAlpha(0);
+            pv[i].setVisibility(View.INVISIBLE);
+        }
         shadeV = root.add(new Views.Box(c, (cv, v) -> drawShade(cv)), 0, 0, Tv.W, Tv.H);
         clockV = root.add(new Views.Box(c, (cv, v) -> drawClock(cv, v)), 0, 0, Tv.W, 480);
         capV = root.add(new Views.Box(c, (cv, v) -> drawCap(cv, v)), 96, Tv.H - 80 - 220, 1100, 220);
@@ -66,7 +77,10 @@ final class Saver {
 
         Player(Wallpapers.Aerial a) {
             this.a = a;
-            view = new TextureView(h.act);
+            view = new TextureView(h.act) {
+                @Override
+                public boolean hasOverlappingRendering() { return false; } // fades without an offscreen copy
+            };
             view.setOpaque(true);
             view.setSurfaceTextureListener(this);
             view.setAlpha(0);
@@ -75,7 +89,13 @@ final class Saver {
 
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int ht) {
+            if (released) return;
+            if (surface != null) surface.release();
             surface = new Surface(st);
+            if (mp != null) { // the view was shown again: the same player goes on drawing into it
+                try { mp.setSurface(surface); } catch (Exception ignored) { failed(this); }
+                return;
+            }
             try {
                 mp = new MediaPlayer();
                 mp.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MOVIE).build());
@@ -98,6 +118,8 @@ final class Saver {
         private void shownNow() {
             if (shown || !on) return;
             shown = true;
+            failures = 0;
+            blackV.setVisibility(View.INVISIBLE); // the film covers the screen: no black layer under it
             Tv.cancel(stall);
             Player old = cur;
             cur = this;
@@ -124,14 +146,22 @@ final class Saver {
         @Override
         public void onSurfaceTextureUpdated(SurfaceTexture st) {}
 
+        boolean released;
+
+        /** Stops at once; the player is torn down on the background thread (it can block on a stalled stream). */
         void release() {
+            released = true;
             if (mp != null) {
                 MediaPlayer m = mp;
                 mp = null;
-                try { m.reset(); } catch (Exception ignored) {}
-                m.release();
-            }
-            if (surface != null) { surface.release(); surface = null; }
+                Surface sf = surface;
+                surface = null;
+                Tv.io.execute(() -> {
+                    try { m.reset(); } catch (Exception ignored) { }
+                    m.release();
+                    if (sf != null) sf.release();
+                });
+            } else if (surface != null) { surface.release(); surface = null; }
             root.removeView(view);
             if (cur == this) cur = null;
             if (next == this) next = null;
@@ -159,9 +189,14 @@ final class Saver {
         }
     };
 
+    private int failures;
+
     private void failed(Player p) {
-        if (p == cur || p == next || cur == null) startPhotos();
+        boolean wasNext = p == next;
         p.release();
+        if (!on || photoMode) return;
+        if (++failures >= 3 || cur == null && !wasNext) { startPhotos(); return; }
+        if (wasNext) Tv.later(1000, this::playNext); // that film did not load: another one
     }
 
     private List<Integer> shuffled() {
@@ -188,19 +223,41 @@ final class Saver {
 
     // ---------- photos (no internet) ----------
 
-    private Bitmap pA, pB;
-    private float pFade = 1, kbT;
-    private int kbDir;
-    private Motion.Run pRun;
+    private final Bitmap[] pic = new Bitmap[2];
+    private final float[] kbStart = new float[2];
+    private final int[] kbDir = new int[2];
+    private int front = 1;
+    private float kbT, kbAcc;
+
+    /**
+     * The slow camera move over a photo (kb1 / kb2 of the web version: 40 s from one framing to another).
+     * Each picture's view is scaled and moved, so nothing is redrawn; the transform changes 30 times a second,
+     * which is smooth for a move this slow and halves the work of the TV's GPU.
+     */
     private final Motion.Anim kenBurns = new Motion.Anim() {
         @Override
         public boolean step(float dt) {
-            if (!on || (cur != null && photos.getAlpha() <= 0)) return false;
+            if (!on || isBlack || photos.getVisibility() != View.VISIBLE || cur != null && photos.getAlpha() <= 0) return false;
             kbT += dt;
-            photos.invalidate();
+            kbAcc += dt;
+            if (kbAcc < 1 / 31f) return true;
+            kbAcc = 0;
+            for (int i = 0; i < 2; i++) if (pic[i] != null && pv[i].getVisibility() == View.VISIBLE) place(i);
             return true;
         }
     };
+
+    private void place(int i) {
+        float p = Math.min(1, (kbT - kbStart[i]) / 40f);
+        int d = kbDir[i];
+        float s0 = d == 0 ? 1.16f : 1.03f, s1 = d == 0 ? 1.02f : 1.17f;
+        float x0 = d == 0 ? -.02f : .02f, x1 = d == 0 ? .015f : -.015f, y0 = d == 0 ? .01f : -.01f, y1 = d == 0 ? -.01f : .012f;
+        float sc = s0 + (s1 - s0) * p;
+        pv[i].setScaleX(sc);
+        pv[i].setScaleY(sc);
+        pv[i].setTranslationX((x0 + (x1 - x0) * p) * Tv.W * sc);
+        pv[i].setTranslationY((y0 + (y1 - y0) * p) * Tv.H * sc);
+    }
 
     private void showPhoto(String id, boolean slow) {
         Tv.bg(() -> {
@@ -212,16 +269,25 @@ final class Saver {
             return f;
         }, b -> {
             if (b == null || !on) { Tv.free(b); return; }
-            if (pRun != null) pRun.cancel();
-            Tv.free(pA);
-            pA = pB;
-            pB = b;
-            pFade = 0;
-            kbT = 0;
-            kbDir = 1 - kbDir;
+            int n = 1 - front, old = front;
+            Views.Box nv = pv[n];
+            Motion.of(nv, Motion.ALPHA).snap(0);
+            Bitmap gone = pic[n];
+            pic[n] = b;
+            kbStart[n] = kbT;
+            kbDir[n] = 1 - kbDir[old];
+            front = n;
+            Tv.free(gone);
+            nv.invalidate();
+            place(n);
             Views.show(photos);
             Motion.snap(photos, Motion.ALPHA, 1);
-            pRun = Motion.run(2400, Tv.EASE, k -> { pFade = k; photos.invalidate(); }).then(() -> { Tv.free(pA); pA = null; });
+            // cross-fade: the new picture comes in while the old one goes
+            Motion.fade(nv, 2400, 1);
+            if (pic[old] != null) Motion.fade(pv[old], 2400, 0).then(() -> {
+                if (front != old && pic[old] != null && pv[old].getVisibility() != View.VISIBLE) { Tv.free(pic[old]); pic[old] = null; }
+            });
+            kbAcc = 1;
             Motion.start(kenBurns);
         });
     }
@@ -254,25 +320,9 @@ final class Saver {
 
     private final Paint pp = new Paint(Paint.FILTER_BITMAP_FLAG);
 
-    private void drawPhotos(Canvas c) {
-        if (pB == null) return;
-        if (pA != null && pFade < 1) { pp.setAlpha(255); drawKb(c, pA, kbT + 2.4f, 1 - kbDir); }
-        pp.setAlpha(Math.round(255 * pFade));
-        drawKb(c, pB, kbT, kbDir);
-    }
-
-    /** kb1 / kb2 of the web version: 40 s from one framing to another, linear. */
-    private void drawKb(Canvas c, Bitmap b, float t, int dir) {
-        float p = Math.min(1, t / 40f);
-        float s0 = dir == 0 ? 1.16f : 1.03f, s1 = dir == 0 ? 1.02f : 1.17f;
-        float x0 = dir == 0 ? -.02f : .02f, x1 = dir == 0 ? .015f : -.015f, y0 = dir == 0 ? .01f : -.01f, y1 = dir == 0 ? -.01f : .012f;
-        float s = s0 + (s1 - s0) * p, tx = (x0 + (x1 - x0) * p) * Tv.W, ty = (y0 + (y1 - y0) * p) * Tv.H;
-        c.save();
-        c.translate(Tv.W / 2f, Tv.H / 2f);
-        c.scale(s, s);
-        c.translate(-Tv.W / 2f + tx, -Tv.H / 2f + ty);
-        Wallpapers.drawCover(c, b, 0, 0, Tv.W, Tv.H, pp);
-        c.restore();
+    private void drawPic(Canvas c, int i) {
+        Bitmap b = pic[i];
+        if (b != null && !b.isRecycled()) Wallpapers.drawCover(c, b, 0, 0, Tv.W, Tv.H, pp);
     }
 
     // ---------- overlay: shade, clock, captions ----------
@@ -361,15 +411,28 @@ final class Saver {
 
     // ---------- start / stop ----------
 
+    /**
+     * While the films play the TV's own screen-saver timer is held off (otherwise it cuts in after its 10 minutes);
+     * the launcher's sleep setting ("Гасить экран", 1 hour by default) ends it with a black screen.
+     */
+    private void keepAwake(boolean on) {
+        android.view.Window w = h.act.getWindow();
+        if (on) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
     void start(boolean black) {
+        keepAwake(!black);
         on = true;
         isBlack = black;
         photoMode = false;
+        failures = 0;
+        blackV.setVisibility(View.VISIBLE);
         Views.show(root);
         Motion.fade(root, 1200, 1).then(() -> { if (on) { covering = true; h.updateCover(); } });
         clockV.setVisibility(black ? View.INVISIBLE : View.VISIBLE);
         shadeV.setVisibility(black ? View.INVISIBLE : View.VISIBLE);
-        capV.setAlpha(0);
+        Motion.snap(capV, Motion.ALPHA, 0);
         if (black) { photos.setVisibility(View.INVISIBLE); return; }
         Motion.snap(clockV, Motion.ALPHA, 0);
         Motion.snap(clockV, Motion.TY, -14);
@@ -384,6 +447,7 @@ final class Saver {
 
     /** Sleep: black screen (also from the running screen saver); any key wakes it. */
     void black() {
+        keepAwake(false);
         isBlack = true;
         Tv.cancel(stall);
         Tv.cancel(poll);
@@ -397,8 +461,12 @@ final class Saver {
     }
 
     void stop() {
+        keepAwake(false);
         on = false;
         covering = false;
+        // the films stop now (no stream during the fade); the last picture stays on screen while it fades
+        if (cur != null && cur.mp != null) { try { cur.mp.pause(); } catch (IllegalStateException ignored) { } }
+        if (next != null) next.release();
         Tv.cancel(stall);
         Tv.cancel(poll);
         Tv.cancel(nextPhoto);
@@ -408,10 +476,11 @@ final class Saver {
             if (on) return;
             if (cur != null) cur.release();
             if (next != null) next.release();
-            if (pRun != null) pRun.cancel();
-            Tv.free(pA);
-            Tv.free(pB);
-            pA = pB = null;
+            for (int i = 0; i < 2; i++) {
+                Motion.of(pv[i], Motion.ALPHA).snap(0);
+                Tv.free(pic[i]);
+                pic[i] = null;
+            }
             Tv.free(shadeBmp);
             shadeBmp = null;
             clockCache.free();

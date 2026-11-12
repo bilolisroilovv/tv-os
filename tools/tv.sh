@@ -43,6 +43,8 @@ case "${1:-}" in
     adb_ shell pm grant $PKG android.permission.ACCESS_FINE_LOCATION 2>/dev/null || true
     # So that the app switcher (Home twice) lists the apps used lately, also those opened by the remote's buttons.
     adb_ shell appops set $PKG GET_USAGE_STATS allow 2>/dev/null || true
+    # Compiled ahead of time: the first start and the first animations do not wait for the JIT.
+    adb_ shell cmd package compile -m speed -f $PKG >/dev/null 2>&1 || true
     echo "Установлено. Сделать главным экраном: tools/tv.sh home";;
   home)
     remember_home

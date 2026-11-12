@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- View tags: the animated properties of a view (Motion), a layer hidden while covered (Home.updateCover). -->
+    <item name="motion" type="id" />
+    <item name="covered" type="id" />
+</resources>

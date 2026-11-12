@@ -15,6 +15,8 @@ final class OS {
 
     private static final ArrayList<Layer> layers = new ArrayList<>();
 
+    static void clear() { layers.clear(); }
+
     static Layer top() { return layers.isEmpty() ? null : layers.get(layers.size() - 1); }
 
     static void push(Layer l) { layers.add(l); }

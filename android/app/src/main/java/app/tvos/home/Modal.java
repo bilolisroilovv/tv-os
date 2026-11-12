@@ -23,7 +23,7 @@ final class Modal {
 
     private static Home h;
     private static Views.Abs alertRoot, kbRoot;
-    private static Views.Box alertVeil, alertBox, kbVeil, kbBox;
+    private static Views.Box alertVeil, alertBox, kbVeil, kbBox, caretV;
     private static Bitmap veil;
     private static boolean veilDark;
 
@@ -40,6 +40,8 @@ final class Modal {
         kbRoot.overlapping = false;
         kbVeil = kbRoot.add(new Views.Box(c, (cv, v) -> drawVeil(cv)), 0, 0, Tv.W, Tv.H);
         kbBox = kbRoot.add(new Views.Box(c, (cv, v) -> drawKb(cv)), 0, 0, Tv.W, Tv.H);
+        // the caret is a view of its own: blinking only changes its opacity, the keyboard is not redrawn
+        caretV = kbRoot.add(new Views.Box(c, (cv, v) -> { kp.setColor(Theme.blue()); cv.drawRoundRect(new RectF(0, 0, 3, 54), 2, 2, kp); }), 0, 0, 3, 54);
         alertRoot.setAlpha(0);
         alertRoot.setVisibility(View.INVISIBLE);
         kbRoot.setAlpha(0);
@@ -65,6 +67,7 @@ final class Modal {
             k.drawColor(Theme.dark ? 0xff111111 : 0xffe6e6eb);
             if (b != null) Wallpapers.drawCover(k, b, 0, 0, 480, 270, vp);
             k.drawColor(Theme.dark ? Tv.rgba(10, 10, 12, .74f) : Tv.rgba(236, 236, 242, .78f));
+            veil.setHasAlpha(false);
         }
         c.drawBitmap(veil, null, new RectF(0, 0, Tv.W, Tv.H), vp);
     }
@@ -97,7 +100,14 @@ final class Modal {
     private static StaticLayout aLayout;
 
     static void alert(String title, String text, Bitmap pic, String glyph, String[] buttons, boolean[] red, int cancelIndex, int focus, IntConsumer done) {
-        if (aLayer != null) OS.drop(aLayer);
+        if (aLayer != null) {
+            // an alert over an alert: the first one counts as cancelled (its caller always hears back)
+            OS.drop(aLayer);
+            aLayer = null;
+            IntConsumer prev = aDone;
+            aDone = null;
+            if (prev != null) prev.accept(aCancel);
+        }
         aTitle = title;
         aText = text == null ? "" : text;
         aPic = pic;
@@ -239,15 +249,22 @@ final class Modal {
     private static final Runnable blink = new Runnable() {
         @Override
         public void run() {
-            if (kLayer == null) return;
+            if (kLayer == null || !h.act.visible) return; // no timer while another app is in front
             kCaret = !kCaret;
-            kbBox.invalidate();
+            caretV.setAlpha(kCaret ? 1 : 0);
             Tv.later(525, this);
         }
     };
     private static final Runnable unreveal = () -> { kReveal = -1; kbBox.invalidate(); };
 
     static boolean keyboardOpen() { return kLayer != null; }
+
+    /** Back from another app with the keyboard still open: the caret blinks again. */
+    static void resume() {
+        if (kLayer == null) return;
+        Tv.cancel(blink);
+        Tv.later(525, blink);
+    }
 
     static void keyboard(String title, String sub, String value, String placeholder, int max, boolean secure, String doneLabel, Consumer<String> done) {
         kTitle = title == null ? "" : title;
@@ -273,6 +290,7 @@ final class Modal {
         kLayer = Modal::kbKey;
         OS.push(kLayer);
         kCaret = true;
+        caretV.setAlpha(1);
         Tv.cancel(blink);
         Tv.later(525, blink);
         OS.speak(kTitle + ". " + kSub);
@@ -505,10 +523,10 @@ final class Modal {
             kF.setColor(label);
             c.drawText(shown, tx - shift, base, kF);
         }
-        if (kCaret) {
-            kp.setColor(Theme.blue());
-            float cx = tx - shift + tw + 2;
-            c.drawRoundRect(new RectF(cx, f.centerY() - 27, cx + 3, f.centerY() + 27), 2, 2, kp);
+        float cx = tx - shift + tw + 2, cy = f.centerY() - 27;
+        if (caretV.getTranslationX() != cx || caretV.getTranslationY() != cy) {
+            caretV.setTranslationX(cx);
+            caretV.setTranslationY(cy);
         }
         c.restore();
         // letters

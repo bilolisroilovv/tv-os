@@ -53,10 +53,10 @@ public class MainActivity extends Activity {
                 fit(r - l, b - t);
             }
         };
-        frame.setBackgroundColor(0xff000000);
-        stage = new Stage(this);
+        stage = new Stage(this); // the stage paints the black under everything: no window or frame background
         frame.addView(stage, new FrameLayout.LayoutParams(Tv.W, Tv.H));
         setContentView(frame);
+        getWindow().setBackgroundDrawable(null); // one full-screen fill less on every frame
         home = new Home(this, stage);
         fps = new Fps(this);
         volume = new Volume(home);
@@ -223,6 +223,11 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         unregisterReceiver(packages);
         Bench.unregister(this);
+        // if Android ever re-creates the activity, nothing of this one stays alive or answers keys
+        Prefs.clearListeners();
+        Wallpapers.clearListeners();
+        OS.clear();
+        Motion.clear();
         super.onDestroy();
     }
 

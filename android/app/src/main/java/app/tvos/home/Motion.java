@@ -4,7 +4,6 @@ import android.view.Choreographer;
 import android.view.View;
 
 import java.util.ArrayList;
-import java.util.WeakHashMap;
 
 /**
  * The animation engine: real springs (as tvOS) and CSS-like tweens, all stepped from one Choreographer callback.
@@ -41,6 +40,8 @@ final class Motion implements Choreographer.FrameCallback {
     }
 
     static void stop(Anim a) { I.list.remove(a); }
+
+    static void clear() { I.list.clear(); }
 
     static boolean busy() { return !I.list.isEmpty(); }
 
@@ -126,14 +127,21 @@ final class Motion implements Choreographer.FrameCallback {
             return this;
         }
 
+        /** Jumps to x; an animation in flight counts as finished (its then() runs). */
         void snap(float x) {
             v = target = x;
             vel = 0;
             if (running) { running = false; stop(this); }
             set.set(x);
+            end();
         }
 
-        Val then(Runnable r) { onEnd = r; return this; }
+        /** r runs when this animation ends — at once if nothing is moving. */
+        Val then(Runnable r) {
+            if (running) onEnd = r;
+            else if (r != null) r.run();
+            return this;
+        }
 
         private void end() {
             Runnable r = onEnd;
@@ -175,12 +183,13 @@ final class Motion implements Choreographer.FrameCallback {
     // ---------- view properties ----------
 
     static final int TX = 0, TY = 1, SCALE = 2, ALPHA = 3, RX = 4, RY = 5, ROT = 6;
-    private static final WeakHashMap<View, Val[]> props = new WeakHashMap<>();
-
-    /** The animated property of a view (created at its current value; one per view and property). */
+    /**
+     * The animated property of a view (created at its current value; one per view and property). The values live
+     * in the view's own tag, so they go away with the view (a map keyed by views would keep every view alive).
+     */
     static Val of(View v, int prop) {
-        Val[] a = props.get(v);
-        if (a == null) props.put(v, a = new Val[7]);
+        Val[] a = (Val[]) v.getTag(R.id.motion);
+        if (a == null) v.setTag(R.id.motion, a = new Val[7]);
         if (a[prop] == null) {
             switch (prop) {
                 case TX: a[prop] = new Val(v.getTranslationX(), 0.1f, v::setTranslationX); break;
@@ -188,7 +197,8 @@ final class Motion implements Choreographer.FrameCallback {
                 case SCALE: a[prop] = new Val(v.getScaleX(), 0.0005f, s -> { v.setScaleX(s); v.setScaleY(s); }); break;
                 case ALPHA: a[prop] = new Val(v.getAlpha(), 0.002f, x -> {
                     v.setAlpha(Math.max(0, Math.min(1, x)));
-                    int vis = x <= 0.001f ? View.INVISIBLE : View.VISIBLE;
+                    // a layer hidden because a full-screen screen covers it stays hidden while it fades
+                    int vis = x <= 0.001f || v.getTag(R.id.covered) == Boolean.TRUE ? View.INVISIBLE : View.VISIBLE;
                     if (v.getVisibility() != vis && v.getVisibility() != View.GONE) v.setVisibility(vis);
                 }); break;
                 case RX: a[prop] = new Val(v.getRotationX(), 0.01f, v::setRotationX); break;
@@ -199,14 +209,31 @@ final class Motion implements Choreographer.FrameCallback {
         return a[prop];
     }
 
-    static Val spring(View v, int prop, float[] spec, float to) { return of(v, prop).spring(spec, to); }
+    /** A property set directly (not through Motion) since: start from the view's real value. */
+    private static Val synced(View v, int prop) {
+        Val x = of(v, prop);
+        if (!x.running) {
+            switch (prop) {
+                case TX: x.v = v.getTranslationX(); break;
+                case TY: x.v = v.getTranslationY(); break;
+                case SCALE: x.v = v.getScaleX(); break;
+                case ALPHA: x.v = v.getVisibility() == View.VISIBLE ? v.getAlpha() : 0; break;
+                case RX: x.v = v.getRotationX(); break;
+                case RY: x.v = v.getRotationY(); break;
+                default: x.v = v.getRotation();
+            }
+        }
+        return x;
+    }
 
-    static Val tween(View v, int prop, float ms, Tv.Ease e, float to) { return of(v, prop).tween(ms, e, to); }
+    static Val spring(View v, int prop, float[] spec, float to) { return synced(v, prop).spring(spec, to); }
+
+    static Val tween(View v, int prop, float ms, Tv.Ease e, float to) { return synced(v, prop).tween(ms, e, to); }
 
     static void snap(View v, int prop, float to) { of(v, prop).snap(to); }
 
     /** Fade a view in or out (INVISIBLE at 0, so it is not even recorded). */
-    static Val fade(View v, float ms, float to) { return of(v, ALPHA).tween(ms, Tv.EASE, to); }
+    static Val fade(View v, float ms, float to) { return synced(v, ALPHA).tween(ms, Tv.EASE, to); }
 
     // ---------- one-shot timelines ----------
 

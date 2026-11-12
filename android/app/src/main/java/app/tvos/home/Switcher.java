@@ -56,7 +56,7 @@ final class Switcher {
         private void drawCard(Canvas c) {
             RectF r = new RectF(ML, MT, ML + CW, MT + CH);
             SHADOW.draw(c, r.left, r.top, r.right, r.bottom, 1, true);
-            if (pic != null) {
+            if (pic != null && !pic.isRecycled()) {
                 p.setColor(0xff000000);
                 p.setShader(Gfx.coverShader(pic, r.left, r.top, r.width(), r.height()));
                 c.drawRoundRect(r, 42, 42, p);
@@ -119,6 +119,7 @@ final class Switcher {
             k.drawColor(0xff111111);
             if (bgSrc != null) k.drawBitmap(bgSrc, null, new RectF(0, 0, 480, 270), bp);
             k.drawColor(Tv.black(.5f));
+            bgBmp.setHasAlpha(false);
         }
         c.drawBitmap(bgBmp, null, new RectF(0, 0, Tv.W, Tv.H), bp);
     }
@@ -165,30 +166,44 @@ final class Switcher {
         if (i < ids.size()) OS.speak(h.byId.containsKey(ids.get(i)) ? h.byId.get(ids.get(i)).name : "");
     }
 
-    /**
-     * Apps used in the last hours, oldest first, as Android counted them (also those started by the remote's own
-     * buttons). Empty without the usage-access permission (tools/tv.sh install grants it).
-     */
-    private List<String> usedLately() {
-        java.util.HashMap<String, Long> when = new java.util.HashMap<>();
-        List<String> out = new ArrayList<>();
-        try {
+    /** Apps Android saw in front in the last hours: {package, time}, oldest first; read off the UI thread. */
+    private List<Object[]> used = new ArrayList<>();
+
+    /** Called when the home screen comes back: the history is read in the background, ready for double-Home. */
+    void refreshUsage() {
+        String self = h.act.getPackageName();
+        Tv.bg(() -> {
+            List<Object[]> out = new ArrayList<>();
             android.app.usage.UsageStatsManager um = h.act.getSystemService(android.app.usage.UsageStatsManager.class);
             long now = System.currentTimeMillis();
             android.app.usage.UsageEvents ev = um.queryEvents(now - 6 * 3600_000L, now);
             android.app.usage.UsageEvents.Event e = new android.app.usage.UsageEvents.Event();
+            java.util.LinkedHashMap<String, Long> last = new java.util.LinkedHashMap<>();
             while (ev.hasNextEvent()) {
                 ev.getNextEvent(e);
-                if (e.getEventType() != android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) continue;
-                String p = e.getPackageName();
-                if (p.equals(h.act.getPackageName()) || !h.byId.containsKey(p)) continue;
-                out.remove(p);
-                if (!OS.closedAfter(p, e.getTimeStamp())) { out.add(p); when.put(p, e.getTimeStamp()); } // not closed since
+                if (e.getEventType() != android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED || self.equals(e.getPackageName())) continue;
+                last.remove(e.getPackageName());
+                last.put(e.getPackageName(), e.getTimeStamp());
             }
-        } catch (RuntimeException ignored) {
-            // no usage access: only the apps opened from the launcher
+            for (java.util.Map.Entry<String, Long> x : last.entrySet()) out.add(new Object[]{x.getKey(), x.getValue()});
+            return out;
+        }, r -> { if (r != null) used = r; });
+    }
+
+    /**
+     * The cards, oldest first: apps used lately as Android counted them (also those started by the remote's own
+     * buttons; needs usage access, which tools/tv.sh install grants) and the ones the launcher opened itself.
+     */
+    private List<String> usedLately() {
+        java.util.HashMap<String, Long> when = new java.util.HashMap<>();
+        List<String> out = new ArrayList<>();
+        for (Object[] u : used) {
+            String p = (String) u[0];
+            long t = (Long) u[1];
+            if (!h.byId.containsKey(p) || OS.closedAfter(p, t)) continue; // closed in the switcher since its last use
+            out.add(p);
+            when.put(p, t);
         }
-        // and the apps the launcher opened itself (Settings among them), all in the order they were last used
         for (String id : OS.recents()) {
             if (!h.byId.containsKey(id)) continue;
             long t = Math.max(OS.usedAt(id), when.containsKey(id) ? when.get(id) : 0);
@@ -200,8 +215,32 @@ final class Switcher {
         return out;
     }
 
+    private int gen; // one opening of the switcher: timers of an earlier one do nothing
+    private final List<Motion.Run> flying = new ArrayList<>();
+
+    /** The cards stop flying in (an arrow was pressed): springs take over from where they are. */
+    private void land() {
+        gen++;
+        for (Motion.Run r : flying) r.cancel();
+        flying.clear();
+        for (Card c : cards) c.setTranslationY(0);
+    }
+
+    /** The home screen is left (an app came to the front): the switcher closes at once. */
+    void leave() {
+        if (layer == null) return;
+        OS.drop(layer);
+        layer = null;
+        land();
+        clear();
+        Motion.snap(bg, Motion.ALPHA, 0);
+        h.updateCover();
+    }
+
     void open() {
         if (layer != null) return;
+        gen++;
+        flying.clear();
         ids = new ArrayList<>();
         ids.addAll(usedLately());
         while (ids.size() > 10) ids.remove(0);
@@ -218,8 +257,9 @@ final class Switcher {
             else {
                 // no picture yet: it is made once the cards have flown in (it costs a few frames)
                 Card sc = settingsCard;
+                int g = gen;
                 Tv.later(620, () -> {
-                    if (layer == null || !cards.contains(sc)) return;
+                    if (layer == null || g != gen || !cards.contains(sc)) return;
                     settingsSnap = h.settings.snapshot(CW, CH);
                     sc.pic = settingsSnap;
                     sc.invalidate();
@@ -242,14 +282,18 @@ final class Switcher {
             c.setAlpha(0);
             Motion.snap(c, Motion.SCALE, s0);
             Motion.snap(c, Motion.ALPHA, 0);
-            Tv.later(d * 40L, () -> Motion.run(520, Tv.LINEAR, k -> {
-                float p = e.at(k);
-                c.setTranslationY(y0 * (1 - p));
-                float s = s0 + (s1 - s0) * p;
-                c.setScaleX(s);
-                c.setScaleY(s);
-                c.setAlpha(Math.min(1, a1 * k * 2));
-            }).then(() -> { Motion.snap(c, Motion.SCALE, s1); Motion.snap(c, Motion.ALPHA, a1); }));
+            int g = gen;
+            Tv.later(d * 40L, () -> {
+                if (g != gen) return;
+                flying.add(Motion.run(520, Tv.LINEAR, k -> {
+                    float p = e.at(k);
+                    c.setTranslationY(y0 * (1 - p));
+                    float s = s0 + (s1 - s0) * p;
+                    c.setScaleX(s);
+                    c.setScaleY(s);
+                    c.setAlpha(Math.min(1, a1 * k * 2));
+                }).then(() -> { Motion.snap(c, Motion.SCALE, s1); Motion.snap(c, Motion.ALPHA, a1); }));
+            });
         }
         layer = this::key;
         OS.push(layer);
@@ -270,7 +314,8 @@ final class Switcher {
                 c.setTranslationY(60 * k);
             });
         }
-        Tv.later(300, () -> { if (layer == null) clear(); });
+        int g = ++gen;
+        Tv.later(300, () -> { if (layer == null && g == gen) clear(); });
         if (then != null) then.run();
     }
 
@@ -298,12 +343,14 @@ final class Switcher {
     /** Settings forgot its pages (closed from the switcher, reset) or the app is stopped. */
     void forgetSettings() {
         Tv.cancel(makeSnap);
+        for (Card c : cards) if (c.pic == settingsSnap) { c.pic = null; c.invalidate(); } // never draw a freed picture
         Tv.free(settingsSnap);
         settingsSnap = null;
     }
 
     private void openApp() {
         if (i >= cards.size()) return;
+        land();
         String id = ids.get(i);
         Card c = cards.get(i);
         Sounds.select();
@@ -324,7 +371,9 @@ final class Switcher {
         OS.drop(layer);
         layer = null;
         h.updateCover();
+        int g = ++gen;
         Tv.later(430, () -> {
+            if (g != gen) return; // the switcher was opened again meanwhile
             h.resume(id);
             clear();
         });
@@ -332,6 +381,7 @@ final class Switcher {
 
     private void kill() {
         if (i >= cards.size()) return;
+        land();
         String id = ids.get(i);
         Card c = cards.get(i);
         float y0 = c.getTranslationY(), s0 = c.getScaleX(), a0 = c.getAlpha();
@@ -367,7 +417,7 @@ final class Switcher {
             case "left":
             case "right": {
                 int n = i + ("left".equals(a) ? -1 : 1);
-                if (n >= 0 && n < ids.size()) { i = n; Sounds.tick(); place(false); } else Sounds.bump();
+                if (n >= 0 && n < ids.size()) { land(); i = n; Sounds.tick(); place(false); } else Sounds.bump();
                 break;
             }
             case "up": if (!ids.isEmpty()) kill(); else Sounds.bump(); break;

@@ -36,11 +36,11 @@ final class Prefs {
         DEF.put("wallpaper", "");
         DEF.put("saverType", "aerial");
         DEF.put("saverAfter", 2);
-        DEF.put("saverEvery", 60); // seconds per Aerial film (0 = the whole film)
+        DEF.put("saverEvery", 120); // seconds per Aerial film (0 = the whole film); each new film is a new download
         DEF.put("saverClock", true);
         DEF.put("saverCaps", true);
         DEF.put("saverCats", "[\"Landscapes\",\"Cities\",\"Space\",\"Underwater\"]");
-        DEF.put("sleepAfter", 0);
+        DEF.put("sleepAfter", 60); // as Apple TV: after an hour without a key the screen goes black (stops the Aerial stream)
         DEF.put("bold", false);
         DEF.put("solid", false);
         DEF.put("contrast", false);
@@ -107,6 +107,8 @@ final class Prefs {
     }
 
     static void onAny(Listener l, String... keys) { for (String k : keys) on(k, l); }
+
+    static void clearListeners() { subs.clear(); }
 
     /** Forget everything (Settings -> System -> Reset). */
     static void reset() { sp.edit().clear().commit(); }
