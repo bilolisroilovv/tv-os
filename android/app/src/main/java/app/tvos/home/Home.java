@@ -1230,8 +1230,13 @@ final class Home {
         Tv.bg(() -> Apps.big(a), b -> { if (b != null && launched == a) { launchBig = b; launch.invalidate(); } });
         launch.invalidate();
         if (instant) {
+            // from the app switcher: its card already grew to full screen, the app itself starts right away
             zoom(launch, launchRect, true, true);
             zoomPage(true, true);
+            if (!Apps.launch(act, a.pkg)) {
+                closeApp();
+                toast("Не удалось открыть", a.name, a.banner, null);
+            }
             return;
         }
         Runnable go = () -> {
